@@ -47,7 +47,7 @@ class Database:
     """
 
     DEFAULT_ADMIN_USERNAME = "admin"
-    DEFAULT_ADMIN_PASSWORD = "123"
+    DEFAULT_ADMIN_PASSWORD = "admin123"
 
     def __init__(self, db_path: str = "gym.db") -> None:
         self.db_path = db_path
@@ -113,11 +113,11 @@ class Database:
             CREATE TABLE IF NOT EXISTS members (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 name      TEXT    NOT NULL,
-                phone     TEXT,
-                email     TEXT,
+                phone     TEXT UNIQUE,
+                email     TEXT UNIQUE,
                 gender    TEXT,
                 join_date TEXT,
-                qr_code   TEXT
+                qr_code   TEXT UNIQUE
             )
             """,
 
@@ -139,7 +139,7 @@ class Database:
                 plan_id    INTEGER NOT NULL,
                 start_date TEXT,
                 end_date   TEXT,
-                status     TEXT,
+                status     TEXT CHECK(status IN ('active', 'expired', 'cancelled')),
                 FOREIGN KEY (member_id) REFERENCES members(id)
                     ON DELETE CASCADE ON UPDATE CASCADE,
                 FOREIGN KEY (plan_id)   REFERENCES plans(id)
@@ -153,7 +153,7 @@ class Database:
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 member_id    INTEGER NOT NULL,
                 checkin_time TEXT,
-                status       TEXT,
+                status       TEXT CHECK(status IN ('valid', 'expired')),
                 FOREIGN KEY (member_id) REFERENCES members(id)
                     ON DELETE CASCADE ON UPDATE CASCADE
             )
