@@ -7,7 +7,7 @@ Run with:
 
 import sys
 import os
-
+from pathlib import Path
 # ── Ensure the project root is on the path so all imports resolve ────────── #
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
@@ -17,7 +17,15 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 
-from ui.main_window import MainWindow, APP_STYLE
+from ui.main_window import MainWindow
+def load_stylesheet(app):
+    qss_path = Path(PROJECT_ROOT) / "styles" / "styles.qss"
+
+    if qss_path.exists():
+        with open(qss_path, "r", encoding="utf-8") as f:
+            app.setStyleSheet(f.read())
+    else:
+        print("⚠️ Không tìm thấy styles.qss")
 
 
 def main() -> int:
@@ -32,7 +40,7 @@ def main() -> int:
     app.setApplicationDisplayName("GymTK — Gym Management System")
 
     # ── Global stylesheet ──
-    app.setStyleSheet(APP_STYLE)
+    load_stylesheet(app)
 
     # ── Default font ──
     font = QFont("Segoe UI", 10)
