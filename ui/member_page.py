@@ -90,7 +90,7 @@ class MemberDialog(QDialog):
         self.email_input.setPlaceholderText("email@example.com")
 
         self.gender_combo = QComboBox()
-        self.gender_combo.addItems(["", "Nam", "Nữ", "Khác"])
+        self.gender_combo.addItems(["", "Nam", "Nữ"])
 
         # Form
         form = QFormLayout()
@@ -288,6 +288,8 @@ class MemberPage(QWidget):
         tbl = QTableWidget(0, len(COLUMNS))
         tbl.setHorizontalHeaderLabels(COLUMNS)
 
+        for col in range(len(COLUMNS)):
+            tbl.horizontalHeaderItem(col).setTextAlignment(Qt.AlignCenter)
         # Hành vi chọn: toàn hàng, đơn, không sửa trực tiếp
         tbl.setSelectionBehavior(QTableWidget.SelectRows)
         tbl.setSelectionMode(QTableWidget.SingleSelection)
@@ -298,13 +300,12 @@ class MemberPage(QWidget):
         tbl.setSortingEnabled(True)
         tbl.setShowGrid(False)
 
-        tbl.horizontalHeaderItem(COL_NAME).setTextAlignment(Qt.AlignLeft)
-        tbl.horizontalHeaderItem(COL_EMAIL).setTextAlignment(Qt.AlignLeft)
+        
         tbl.horizontalHeaderItem(COL_PHONE).setTextAlignment(Qt.AlignCenter)
 
         # Giãn cột
         hdr = tbl.horizontalHeader()
-        hdr.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(COL_ID,     QHeaderView.ResizeToContents)
         hdr.setSectionResizeMode(COL_NAME,   QHeaderView.Stretch)
         hdr.setSectionResizeMode(COL_PHONE,  QHeaderView.Interactive)
@@ -350,25 +351,12 @@ class MemberPage(QWidget):
 
         for row_idx, m in enumerate(members):
             self.table.insertRow(row_idx)
-            self._set_cell(row_idx, COL_ID, str(row_idx + 1), align=Qt.AlignCenter, real_id = m.get("id"))
-            self._set_cell(
-                row_idx, COL_NAME,
-                m.get("name", ""),
-                align=Qt.AlignLeft | Qt.AlignVCenter
-            )
-            self._set_cell(
-                row_idx, COL_PHONE,
-                m.get("phone", ""),
-                align=Qt.AlignCenter   # số điện thoại nên căn giữa cho đẹp
-            )
-            self._set_cell(
-                row_idx, COL_EMAIL,
-                m.get("email", ""),
-                align=Qt.AlignLeft | Qt.AlignVCenter
-            )
-            self._set_cell(row_idx, COL_GENDER, m.get("gender", ""),    align=Qt.AlignCenter)
-            self._set_cell(row_idx, COL_JOIN,   m.get("join_date", ""), align=Qt.AlignCenter)
-
+            self._set_cell(row_idx, COL_ID, str(row_idx + 1), Qt.AlignCenter, real_id=m.get("id"))
+            self._set_cell(row_idx, COL_NAME, m.get("name", ""), Qt.AlignCenter)
+            self._set_cell(row_idx, COL_PHONE, m.get("phone", ""), Qt.AlignCenter)
+            self._set_cell(row_idx, COL_EMAIL, m.get("email", ""), Qt.AlignCenter)
+            self._set_cell(row_idx, COL_GENDER, m.get("gender", ""), Qt.AlignCenter)
+            self._set_cell(row_idx, COL_JOIN, m.get("join_date", ""), Qt.AlignCenter)
         self.table.setSortingEnabled(True)
 
         if members:
