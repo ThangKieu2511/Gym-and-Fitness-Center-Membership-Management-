@@ -9,7 +9,7 @@ Thay đổi so với Phase 6:
 """
 
 from __future__ import annotations
-
+from datetime import date, timedelta
 from datetime import date
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
@@ -348,7 +348,7 @@ class RegistrationPanel(QWidget):
 
         new_end = (
             date.fromisoformat(active["end_date"])
-            + __import__("datetime").timedelta(days=preview["total_months"] * 30)
+            + timedelta(days=preview["total_months"] * 30)
         ).isoformat()
 
         reply = QMessageBox.question(
@@ -690,11 +690,13 @@ class SubscriptionPage(QWidget):
 
     @Slot(int, str)
     def _on_checkin_done(self, member_id: int, status: str) -> None:
+        self._sub_table.refresh()
         name = self._reg_panel._member_combo.currentText()
+        today = date.today().strftime("%d/%m/%Y")
 
         # ── Màu + text theo 3 trạng thái ──
         if status == "valid":
-            text  = f"✅  Check-in thành công — {name}"
+            text  = f"✅  Check-in thành công — {name} ({today})"
             color = "#22c55e"   # xanh lá
         elif status == "expired":
             text  = f"⚠️  Gói hết hạn — {name}"
