@@ -1,21 +1,10 @@
 """
-ui/subscription_page.py  —  Phase 5
+ui/subscription_page.py  —  Phase 6
 
-Trang Quản Lý Gói Tập & Đăng Ký Gói.
-
-Bố cục:
-  ┌─────────────────────────────────────────────────────────────┐
-  │  Header  (icon + tiêu đề)                                   │
-  ├─────────────────────┬───────────────────────────────────────┤
-  │  Form Đăng Ký       │  Danh Sách Gói Đã Đăng Ký            │
-  │  • Chọn hội viên    │  (bảng — tự refresh khi chọn hội viên │
-  │  • Loại khách       │   hoặc sau khi đăng ký thành công)    │
-  │  • Loại gói         │                                       │
-  │  • Preview giá/ngày │                                       │
-  │  • Nút Đăng Ký      │                                       │
-  └─────────────────────┴───────────────────────────────────────┘
-  │  Status bar                                                  │
-  └─────────────────────────────────────────────────────────────┘
+Thay đổi so với Phase 5:
+  • RegistrationPanel: thêm nút "Gia Hạn" (extend) + "Check-in"
+  • SubscriptionTable: thêm nút "Huỷ Gói" per-row (chỉ active mới cho huỷ)
+  • Tất cả thao tác đều auto-refresh bảng sau khi thành công
 """
 
 from __future__ import annotations
@@ -23,7 +12,7 @@ from __future__ import annotations
 from datetime import date
 
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QFrame,
@@ -47,16 +36,16 @@ from controllers.subscription_controller import (
     SubscriptionController,
 )
 
-# ── Cột bảng lịch sử gói ──────────────────────────────────────────────── #
-SUB_COLS     = ["#", "Gói Tập", "Giá (đ)", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Trạng Thái"]
-COL_IDX      = 0
-COL_PLAN     = 1
-COL_PRICE    = 2
-COL_START    = 3
-COL_END      = 4
-COL_STATUS   = 5
+# ── Cột bảng ────────────────────────────────────────────────────────────── #
+SUB_COLS   = ["#", "Gói Tập", "Giá (đ)", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Trạng Thái", ""]
+COL_IDX    = 0
+COL_PLAN   = 1
+COL_PRICE  = 2
+COL_START  = 3
+COL_END    = 4
+COL_STATUS = 5
+COL_ACTION = 6   # nút Huỷ
 
-# Nhãn hiển thị loại gói + ưu đãi
 PLAN_LABELS: dict[str, str] = {
     "1_month":  "1 Tháng",
     "3_month":  "3 Tháng  (+1 tặng → 4 tháng)",
@@ -64,17 +53,15 @@ PLAN_LABELS: dict[str, str] = {
     "12_month": "12 Tháng (+3 tặng → 15 tháng)",
 }
 
-PLAN_KEYS   = list(PLAN_CONFIG.keys())      # ["1_month", "3_month", ...]
-CTYPE_KEYS  = list(PRICE_PER_MONTH.keys())  # ["student", "adult"]
+PLAN_KEYS  = list(PLAN_CONFIG.keys())
+CTYPE_KEYS = list(PRICE_PER_MONTH.keys())
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
-#  PreviewCard — hiển thị giá + thông tin gói                               #
+#  PreviewCard                                                               #
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class PreviewCard(QFrame):
-    """Widget nhỏ hiển thị giá + ngày kết thúc theo lựa chọn hiện tại."""
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("previewCard")
@@ -85,7 +72,6 @@ class PreviewCard(QFrame):
         layout.setContentsMargins(16, 14, 16, 14)
         layout.setSpacing(8)
 
-        # ── Tiêu đề card ──
         title = QLabel("💰  Thông Tin Gói")
         title.setObjectName("previewTitle")
         layout.addWidget(title)
@@ -95,59 +81,47 @@ class PreviewCard(QFrame):
         sep.setObjectName("sidebarDivider")
         layout.addWidget(sep)
 
-        # ── Các dòng thông tin ──
-        self._lbl_price      = self._info_row(layout, "Giá thanh toán:")
-        self._lbl_duration   = self._info_row(layout, "Thời gian:")
-        self._lbl_bonus      = self._info_row(layout, "Tháng tặng:")
-        self._lbl_end        = self._info_row(layout, "Ngày kết thúc:")
-
+        self._lbl_price    = self._info_row(layout, "Giá thanh toán:")
+        self._lbl_duration = self._info_row(layout, "Thời gian:")
+        self._lbl_bonus    = self._info_row(layout, "Tháng tặng:")
+        self._lbl_end      = self._info_row(layout, "Ngày kết thúc:")
         self.clear()
 
     @staticmethod
     def _info_row(parent_layout: QVBoxLayout, label_text: str) -> QLabel:
-        row    = QHBoxLayout()
+        row   = QHBoxLayout()
         row.setSpacing(6)
-        lbl_k  = QLabel(label_text)
+        lbl_k = QLabel(label_text)
         lbl_k.setObjectName("previewKey")
         lbl_k.setMinimumWidth(130)
-        lbl_v  = QLabel("—")
+        lbl_v = QLabel("—")
         lbl_v.setObjectName("previewValue")
         row.addWidget(lbl_k)
         row.addWidget(lbl_v, stretch=1)
         parent_layout.addLayout(row)
         return lbl_v
 
-    # ── API ──────────────────────────────────────────────────────────── #
-
     def clear(self) -> None:
-        self._lbl_price.setText("—")
-        self._lbl_duration.setText("—")
-        self._lbl_bonus.setText("—")
-        self._lbl_end.setText("—")
+        for lbl in (self._lbl_price, self._lbl_duration, self._lbl_bonus, self._lbl_end):
+            lbl.setText("—")
 
     def update_preview(self, preview: dict) -> None:
-        price    = preview["price"]
-        total    = preview["total_months"]
-        bonus    = preview["bonus_months"]
-        end_date = preview["end_date"]
-
-        self._lbl_price.setText(f"{price:,.0f} đ")
-        self._lbl_duration.setText(f"{total} tháng")
+        self._lbl_price.setText(f"{preview['price']:,.0f} đ")
+        self._lbl_duration.setText(f"{preview['total_months']} tháng")
         self._lbl_bonus.setText(
-            f"{bonus} tháng 🎁" if bonus else "Không có"
+            f"{preview['bonus_months']} tháng 🎁" if preview["bonus_months"] else "Không có"
         )
-        self._lbl_end.setText(end_date)
+        self._lbl_end.setText(preview["end_date"])
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
-#  RegistrationPanel — form đăng ký bên trái                                #
+#  RegistrationPanel — form bên trái                                         #
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class RegistrationPanel(QWidget):
-    """Panel trái chứa form đăng ký gói tập."""
-
-    # Emit (member_id, plan_type, customer_type) khi đăng ký thành công
-    subscription_created = Signal(int, str, str)
+    subscription_created  = Signal(int, str, str)   # member_id, plan_type, ctype
+    subscription_extended = Signal(int)              # member_id
+    checkin_done          = Signal(int, str)         # member_id, status
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -155,19 +129,18 @@ class RegistrationPanel(QWidget):
         self._setup_ui()
         self._refresh_members()
 
-    # ── Xây dựng UI ──────────────────────────────────────────────────── #
+    # ── Build UI ─────────────────────────────────────────────────────── #
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 12, 0)
-        root.setSpacing(14)
+        root.setSpacing(12)
 
-        # ── Tiêu đề panel ──
-        pnl_title = QLabel("📋  Đăng Ký Gói Tập")
+        pnl_title = QLabel("📋  Đăng Ký / Gia Hạn Gói")
         pnl_title.setObjectName("panelTitle")
         root.addWidget(pnl_title)
 
-        # ── Chọn hội viên ──
+        # Chọn hội viên
         root.addWidget(self._section_label("Hội Viên"))
         self._member_combo = QComboBox()
         self._member_combo.setPlaceholderText("— Chọn hội viên —")
@@ -175,7 +148,7 @@ class RegistrationPanel(QWidget):
         self._member_combo.currentIndexChanged.connect(self._on_selection_changed)
         root.addWidget(self._member_combo)
 
-        # ── Loại khách ──
+        # Loại khách
         root.addWidget(self._section_label("Loại Khách"))
         self._ctype_combo = QComboBox()
         for key in CTYPE_KEYS:
@@ -183,7 +156,7 @@ class RegistrationPanel(QWidget):
         self._ctype_combo.currentIndexChanged.connect(self._on_selection_changed)
         root.addWidget(self._ctype_combo)
 
-        # ── Loại gói ──
+        # Loại gói
         root.addWidget(self._section_label("Gói Tập"))
         self._plan_combo = QComboBox()
         for key in PLAN_KEYS:
@@ -191,19 +164,38 @@ class RegistrationPanel(QWidget):
         self._plan_combo.currentIndexChanged.connect(self._on_selection_changed)
         root.addWidget(self._plan_combo)
 
-        # ── Preview card ──
+        # Preview
         self._preview = PreviewCard()
         root.addWidget(self._preview)
 
-        # ── Nút đăng ký ──
-        self._btn_register = QPushButton("✅  Đăng Ký Gói")
+        # ── Nhóm nút hành động ──
+        root.addWidget(self._section_label("Thao Tác"))
+
+        # Đăng ký mới
+        self._btn_register = QPushButton("✅  Đăng Ký Gói Mới")
         self._btn_register.setObjectName("btnPrimary")
-        self._btn_register.setMinimumHeight(40)
+        self._btn_register.setMinimumHeight(38)
         self._btn_register.setCursor(Qt.PointingHandCursor)
         self._btn_register.clicked.connect(self._on_register)
         root.addWidget(self._btn_register)
 
-        # ── Nút làm mới danh sách hội viên ──
+        # Gia hạn
+        self._btn_extend = QPushButton("🔁  Gia Hạn Gói Hiện Tại")
+        self._btn_extend.setObjectName("btnSecondary")
+        self._btn_extend.setMinimumHeight(38)
+        self._btn_extend.setCursor(Qt.PointingHandCursor)
+        self._btn_extend.clicked.connect(self._on_extend)
+        root.addWidget(self._btn_extend)
+
+        # Check-in
+        self._btn_checkin = QPushButton("🏃  Check-in")
+        self._btn_checkin.setObjectName("btnNeutral")
+        self._btn_checkin.setMinimumHeight(38)
+        self._btn_checkin.setCursor(Qt.PointingHandCursor)
+        self._btn_checkin.clicked.connect(self._on_checkin)
+        root.addWidget(self._btn_checkin)
+
+        # Làm mới danh sách
         self._btn_reload = QPushButton("🔄  Làm Mới Danh Sách")
         self._btn_reload.setObjectName("btnNeutral")
         self._btn_reload.setMinimumHeight(34)
@@ -212,8 +204,6 @@ class RegistrationPanel(QWidget):
         root.addWidget(self._btn_reload)
 
         root.addStretch()
-
-        # Cập nhật preview ngay lập tức
         self._update_preview()
 
     @staticmethod
@@ -222,11 +212,10 @@ class RegistrationPanel(QWidget):
         lbl.setObjectName("formSectionLabel")
         return lbl
 
-    # ── Data helpers ──────────────────────────────────────────────────── #
+    # ── Helpers ──────────────────────────────────────────────────────── #
 
     @Slot()
     def _refresh_members(self) -> None:
-        """Tải lại danh sách hội viên vào combo box."""
         prev_id = self._current_member_id()
         self._member_combo.blockSignals(True)
         self._member_combo.clear()
@@ -235,26 +224,21 @@ class RegistrationPanel(QWidget):
         except Exception:
             members = []
         for m in members:
-            display = f"{m['name']}"
+            display = m["name"]
             if m.get("phone"):
                 display += f"  ({m['phone']})"
             self._member_combo.addItem(display, userData=m["id"])
-
-        # Cố gắng khôi phục lại lựa chọn cũ
         if prev_id is not None:
             for i in range(self._member_combo.count()):
                 if self._member_combo.itemData(i) == prev_id:
                     self._member_combo.setCurrentIndex(i)
                     break
-
         self._member_combo.blockSignals(False)
         self._on_selection_changed()
 
     def _current_member_id(self) -> int | None:
         idx = self._member_combo.currentIndex()
-        if idx < 0:
-            return None
-        return self._member_combo.itemData(idx)
+        return self._member_combo.itemData(idx) if idx >= 0 else None
 
     def _current_plan_type(self) -> str:
         return self._plan_combo.currentData()
@@ -262,14 +246,13 @@ class RegistrationPanel(QWidget):
     def _current_ctype(self) -> str:
         return self._ctype_combo.currentData()
 
-    # ── Preview update ────────────────────────────────────────────────── #
-
     def _update_preview(self) -> None:
         plan_type = self._current_plan_type()
         ctype     = self._current_ctype()
         if plan_type and ctype:
-            preview = SubscriptionController.get_plan_preview(plan_type, ctype)
-            self._preview.update_preview(preview)
+            self._preview.update_preview(
+                SubscriptionController.get_plan_preview(plan_type, ctype)
+            )
         else:
             self._preview.clear()
 
@@ -277,33 +260,44 @@ class RegistrationPanel(QWidget):
     def _on_selection_changed(self) -> None:
         self._update_preview()
 
-    # ── Đăng ký ──────────────────────────────────────────────────────── #
+    def _require_member(self) -> int | None:
+        member_id = self._current_member_id()
+        if member_id is None:
+            QMessageBox.warning(self, "Thiếu Thông Tin", "Vui lòng chọn hội viên.")
+        return member_id
+
+    # ── Slots: hành động ─────────────────────────────────────────────── #
 
     @Slot()
     def _on_register(self) -> None:
-        member_id = self._current_member_id()
-        plan_type = self._current_plan_type()
-        ctype     = self._current_ctype()
-
+        member_id = self._require_member()
         if member_id is None:
-            QMessageBox.warning(self, "Thiếu Thông Tin", "Vui lòng chọn hội viên.")
             return
 
-        # Xác nhận trước khi đăng ký
+        plan_type    = self._current_plan_type()
+        ctype        = self._current_ctype()
         preview      = SubscriptionController.get_plan_preview(plan_type, ctype)
         member_name  = self._member_combo.currentText()
         plan_label   = PLAN_LABELS[plan_type]
-        ctype_label  = CUSTOMER_TYPE_LABEL[ctype]
+
+        # Cảnh báo nếu đang có gói active
+        active = self._controller._db.get_active_subscription(member_id)
+        extra_msg = ""
+        if active:
+            extra_msg = (
+                f"<br><br>⚠️ Hội viên đang có gói active đến <b>{active['end_date']}</b>.<br>"
+                f"Thao tác này sẽ <b>gia hạn</b> thêm {preview['total_months']} tháng."
+            )
 
         reply = QMessageBox.question(
             self,
             "Xác Nhận Đăng Ký",
-            f"<b>Hội viên:</b>  {member_name}<br>"
-            f"<b>Loại khách:</b> {ctype_label}<br>"
-            f"<b>Gói:</b>        {plan_label}<br>"
-            f"<b>Giá:</b>        {preview['price']:,.0f} đ<br>"
-            f"<b>Kết thúc:</b>   {preview['end_date']}<br><br>"
-            "Xác nhận đăng ký?",
+            f"<b>Hội viên:</b> {member_name}<br>"
+            f"<b>Loại khách:</b> {CUSTOMER_TYPE_LABEL[ctype]}<br>"
+            f"<b>Gói:</b> {plan_label}<br>"
+            f"<b>Giá:</b> {preview['price']:,.0f} đ<br>"
+            f"<b>Kết thúc:</b> {preview['end_date']}"
+            f"{extra_msg}<br><br>Xác nhận?",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
@@ -313,21 +307,92 @@ class RegistrationPanel(QWidget):
         try:
             self._controller.create_subscription(member_id, plan_type, ctype)
         except (ValueError, RuntimeError) as exc:
-            QMessageBox.critical(self, "❌  Đăng Ký Thất Bại", str(exc))
+            QMessageBox.critical(self, "❌  Thất Bại", str(exc))
             return
 
         QMessageBox.information(
-            self,
-            "✅  Thành Công",
-            f"Đã đăng ký gói <b>{plan_label}</b> cho <b>{member_name}</b>!<br>"
-            f"Ngày kết thúc: <b>{preview['end_date']}</b>",
+            self, "✅  Thành Công",
+            f"Đã xử lý gói <b>{plan_label}</b> cho <b>{member_name}</b>!",
         )
         self.subscription_created.emit(member_id, plan_type, ctype)
+
+    @Slot()
+    def _on_extend(self) -> None:
+        member_id = self._require_member()
+        if member_id is None:
+            return
+
+        plan_type   = self._current_plan_type()
+        ctype       = self._current_ctype()
+        preview     = SubscriptionController.get_plan_preview(plan_type, ctype)
+        member_name = self._member_combo.currentText()
+        plan_label  = PLAN_LABELS[plan_type]
+
+        # Kiểm tra trước — cần có gói active
+        active = self._controller._db.get_active_subscription(member_id)
+        if not active:
+            QMessageBox.warning(
+                self, "Không Thể Gia Hạn",
+                "Hội viên chưa có gói đang hiệu lực.\n"
+                "Vui lòng dùng nút \"Đăng Ký Gói Mới\".",
+            )
+            return
+
+        new_end = (
+            date.fromisoformat(active["end_date"])
+            + __import__("datetime").timedelta(days=preview["total_months"] * 30)
+        ).isoformat()
+
+        reply = QMessageBox.question(
+            self,
+            "Xác Nhận Gia Hạn",
+            f"<b>Hội viên:</b> {member_name}<br>"
+            f"<b>Gói hiện tại đến:</b> {active['end_date']}<br>"
+            f"<b>Gia hạn thêm:</b> {plan_label} ({preview['total_months']} tháng)<br>"
+            f"<b>Ngày kết thúc mới:</b> {new_end}<br><br>"
+            "Xác nhận gia hạn?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            self._controller.extend_subscription(member_id, plan_type, ctype)
+        except (ValueError, RuntimeError) as exc:
+            QMessageBox.critical(self, "❌  Thất Bại", str(exc))
+            return
+
+        QMessageBox.information(
+            self, "✅  Gia Hạn Thành Công",
+            f"Đã gia hạn gói cho <b>{member_name}</b>.<br>"
+            f"Ngày kết thúc mới: <b>{new_end}</b>",
+        )
+        self.subscription_extended.emit(member_id)
+
+    @Slot()
+    def _on_checkin(self) -> None:
+        member_id = self._require_member()
+        if member_id is None:
+            return
+
+        member_name = self._member_combo.currentText()
+        try:
+            result = self._controller.checkin(member_id)
+        except Exception as exc:
+            QMessageBox.critical(self, "❌  Lỗi Check-in", str(exc))
+            return
+
+        if result["status"] == "valid":
+            QMessageBox.information(self, "✅  Check-in", result["message"])
+        else:
+            QMessageBox.warning(self, "⚠️  Check-in", result["message"])
+
+        self.checkin_done.emit(member_id, result["status"])
 
     # ── Public API ────────────────────────────────────────────────────── #
 
     def refresh_members(self) -> None:
-        """Gọi từ bên ngoài khi danh sách hội viên thay đổi."""
         self._refresh_members()
 
     def selected_member_id(self) -> int | None:
@@ -335,15 +400,20 @@ class RegistrationPanel(QWidget):
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
-#  SubscriptionTable — bảng lịch sử gói bên phải                            #
+#  SubscriptionTable — bảng bên phải                                         #
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class SubscriptionTable(QWidget):
-    """Panel phải hiển thị các gói đã đăng ký của hội viên được chọn."""
+    # Emit khi người dùng huỷ gói thành công → SubscriptionPage refresh
+    subscription_cancelled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._controller = SubscriptionController()
+        self._controller  = SubscriptionController()
+        self._member_id: int | None = None
+        self._member_name: str = ""
+        # Cache sub_id theo row để nút Huỷ biết huỷ cái nào
+        self._sub_ids: list[int] = []
         self._setup_ui()
 
     def _setup_ui(self) -> None:
@@ -351,7 +421,6 @@ class SubscriptionTable(QWidget):
         root.setContentsMargins(12, 0, 0, 0)
         root.setSpacing(10)
 
-        # ── Tiêu đề ──
         hdr = QHBoxLayout()
         self._title_lbl = QLabel("📄  Gói Đã Đăng Ký")
         self._title_lbl.setObjectName("panelTitle")
@@ -362,7 +431,6 @@ class SubscriptionTable(QWidget):
         hdr.addWidget(self._count_lbl)
         root.addLayout(hdr)
 
-        # ── Bảng ──
         self._table = QTableWidget(0, len(SUB_COLS))
         self._table.setHorizontalHeaderLabels(SUB_COLS)
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -378,66 +446,71 @@ class SubscriptionTable(QWidget):
         hh.setSectionResizeMode(COL_PRICE,  QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(COL_START,  QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(COL_END,    QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(COL_STATUS, QHeaderView.Stretch)
+        hh.setSectionResizeMode(COL_ACTION, QHeaderView.ResizeToContents)
 
         root.addWidget(self._table, stretch=1)
 
-        # ── Empty state ──
-        self._empty_lbl = QLabel(
-            "👆  Chọn một hội viên ở bên trái\nđể xem lịch sử gói tập."
-        )
-        self._empty_lbl.setObjectName("emptyStateLabel")
-        self._empty_lbl.setAlignment(Qt.AlignCenter)
-        self._empty_lbl.hide()
-
-    # ── Populate ──────────────────────────────────────────────────────── #
+    # ── Data ─────────────────────────────────────────────────────────── #
 
     def load_for_member(self, member_id: int, member_name: str = "") -> None:
-        """Tải danh sách gói của hội viên vào bảng."""
-        if member_name:
-            self._title_lbl.setText(f"📄  Gói Đã Đăng Ký — {member_name}")
-        else:
-            self._title_lbl.setText("📄  Gói Đã Đăng Ký")
-
+        self._member_id   = member_id
+        self._member_name = member_name
+        self._title_lbl.setText(
+            f"📄  Gói Đã Đăng Ký — {member_name}" if member_name else "📄  Gói Đã Đăng Ký"
+        )
         try:
             subs = self._controller.get_member_subscriptions(member_id)
         except Exception as exc:
             QMessageBox.critical(self, "Lỗi", str(exc))
             return
-
         self._populate(subs)
 
+    def refresh(self) -> None:
+        """Tải lại dữ liệu của member_id hiện tại."""
+        if self._member_id is not None:
+            self.load_for_member(self._member_id, self._member_name)
+
     def clear_table(self) -> None:
+        self._member_id   = None
+        self._member_name = ""
+        self._sub_ids.clear()
         self._table.setRowCount(0)
         self._count_lbl.setText("")
         self._title_lbl.setText("📄  Gói Đã Đăng Ký")
 
     def _populate(self, subs: list[dict]) -> None:
+        self._sub_ids.clear()
         self._table.setSortingEnabled(False)
         self._table.setRowCount(0)
-
         today = date.today().isoformat()
 
         for row_idx, s in enumerate(subs):
             self._table.insertRow(row_idx)
+            self._sub_ids.append(s["id"])
 
-            # ── #
-            self._cell(row_idx, COL_IDX, str(row_idx + 1), Qt.AlignCenter)
-
-            # ── Tên gói
-            self._cell(row_idx, COL_PLAN, s.get("plan_name", ""), Qt.AlignLeft | Qt.AlignVCenter)
-
-            # ── Giá
+            self._cell(row_idx, COL_IDX,   str(row_idx + 1), Qt.AlignCenter)
+            self._cell(row_idx, COL_PLAN,  s.get("plan_name", ""))
             price = s.get("price", 0) or 0
             self._cell(row_idx, COL_PRICE, f"{price:,.0f}", Qt.AlignRight | Qt.AlignVCenter)
-
-            # ── Ngày bắt đầu / kết thúc
             self._cell(row_idx, COL_START, s.get("start_date", ""), Qt.AlignCenter)
             self._cell(row_idx, COL_END,   s.get("end_date",   ""), Qt.AlignCenter)
+            self._set_status_cell(row_idx, s.get("status", ""), s.get("end_date", ""), today)
 
-            # ── Trạng thái với màu sắc
+            # ── Nút Huỷ — chỉ hiện cho gói active ──
             status = s.get("status", "")
-            self._set_status_cell(row_idx, status, s.get("end_date", ""), today)
+            if status == "active":
+                btn = QPushButton("🚫  Huỷ")
+                btn.setObjectName("btnDanger")
+                btn.setFixedHeight(28)
+                btn.setCursor(Qt.PointingHandCursor)
+                # Dùng default arg để capture đúng giá trị lúc tạo
+                btn.clicked.connect(
+                    lambda _, sid=s["id"], rname=s.get("plan_name", ""): self._on_cancel(sid, rname)
+                )
+                self._table.setCellWidget(row_idx, COL_ACTION, btn)
+            else:
+                self._table.setCellWidget(row_idx, COL_ACTION, None)
 
         self._table.setSortingEnabled(True)
         count = len(subs)
@@ -456,26 +529,13 @@ class SubscriptionTable(QWidget):
         self._table.setItem(row, col, item)
         return item
 
-    def _set_status_cell(
-        self,
-        row: int,
-        status: str,
-        end_date: str,
-        today: str,
-    ) -> None:
-        """Hiển thị trạng thái với màu sắc phù hợp."""
+    def _set_status_cell(self, row: int, status: str, end_date: str, today: str) -> None:
         if status == "active":
-            label = "✅  Đang Hiệu Lực"
-            color = QColor("#22c55e")   # xanh lá
-        elif status == "expired" or (end_date and end_date < today):
-            label = "⏹  Đã Hết Hạn"
-            color = QColor("#64748b")   # xám
+            label, color = "✅  Đang Hiệu Lực", QColor("#22c55e")
         elif status == "cancelled":
-            label = "🚫  Đã Hủy"
-            color = QColor("#f87171")   # đỏ nhạt
+            label, color = "🚫  Đã Hủy",        QColor("#f87171")
         else:
-            label = status or "—"
-            color = QColor("#94a3b8")
+            label, color = "⏹  Đã Hết Hạn",    QColor("#64748b")
 
         item = QTableWidgetItem(label)
         item.setTextAlignment(Qt.AlignCenter)
@@ -483,43 +543,57 @@ class SubscriptionTable(QWidget):
         item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
         self._table.setItem(row, COL_STATUS, item)
 
+    # ── Slot: huỷ gói ────────────────────────────────────────────────── #
+
+    def _on_cancel(self, sub_id: int, plan_name: str) -> None:
+        reply = QMessageBox.question(
+            self,
+            "Xác Nhận Huỷ Gói",
+            f"Bạn chắc chắn muốn huỷ gói <b>{plan_name}</b>?<br>"
+            "Thao tác này <b>không thể hoàn tác</b>.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        try:
+            self._controller.cancel_subscription(sub_id)
+        except (ValueError, RuntimeError) as exc:
+            QMessageBox.critical(self, "❌  Thất Bại", str(exc))
+            return
+
+        QMessageBox.information(self, "✅  Đã Huỷ", f"Gói <b>{plan_name}</b> đã được huỷ.")
+        self.refresh()
+        self.subscription_cancelled.emit()
+
 
 # ══════════════════════════════════════════════════════════════════════════ #
-#  SubscriptionPage — trang tổng hợp                                        #
+#  SubscriptionPage                                                          #
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class SubscriptionPage(QWidget):
-    """
-    Trang Quản Lý Gói Tập — tích hợp form đăng ký + lịch sử gói.
-    Giao diện chia đôi trái/phải qua QSplitter.
-    """
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._setup_ui()
-
-    # ── Xây dựng UI ──────────────────────────────────────────────────── #
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
         root.setSpacing(14)
 
-        # ── Header ──
         root.addLayout(self._build_header())
 
-        # ── Divider ──
         div = QFrame()
         div.setFrameShape(QFrame.HLine)
         div.setObjectName("sidebarDivider")
         root.addWidget(div)
 
-        # ── Splitter: form trái | bảng phải ──
         splitter = QSplitter(Qt.Horizontal)
         splitter.setHandleWidth(1)
         splitter.setChildrenCollapsible(False)
 
-        # Wrap RegistrationPanel trong một container có padding
         left_wrap = QWidget()
         left_layout = QVBoxLayout(left_wrap)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -527,7 +601,6 @@ class SubscriptionPage(QWidget):
         left_layout.addWidget(self._reg_panel)
         splitter.addWidget(left_wrap)
 
-        # Wrap SubscriptionTable
         right_wrap = QWidget()
         right_layout = QVBoxLayout(right_wrap)
         right_layout.setContentsMargins(0, 0, 0, 0)
@@ -538,18 +611,16 @@ class SubscriptionPage(QWidget):
         splitter.setSizes([340, 660])
         root.addWidget(splitter, stretch=1)
 
-        # ── Status bar ──
-        self._status_lbl = QLabel("Chọn hội viên và gói tập để bắt đầu đăng ký.")
+        self._status_lbl = QLabel("Chọn hội viên và gói tập để bắt đầu.")
         self._status_lbl.setObjectName("statusLabel")
         root.addWidget(self._status_lbl)
 
         # ── Kết nối tín hiệu ──
-        # Khi chọn hội viên → tải lịch sử gói
-        self._reg_panel._member_combo.currentIndexChanged.connect(
-            self._on_member_combo_changed
-        )
-        # Sau khi đăng ký thành công → refresh bảng
-        self._reg_panel.subscription_created.connect(self._on_subscription_created)
+        self._reg_panel._member_combo.currentIndexChanged.connect(self._on_member_changed)
+        self._reg_panel.subscription_created.connect(self._on_sub_created)
+        self._reg_panel.subscription_extended.connect(self._on_sub_extended)
+        self._reg_panel.checkin_done.connect(self._on_checkin_done)
+        self._sub_table.subscription_cancelled.connect(self._on_sub_cancelled)
 
     def _build_header(self) -> QHBoxLayout:
         hdr = QHBoxLayout()
@@ -561,7 +632,7 @@ class SubscriptionPage(QWidget):
         title = QLabel("Quản Lý Gói Tập")
         title.setObjectName("pageTitle")
 
-        sub = QLabel("Đăng ký gói tập và xem lịch sử đăng ký của hội viên")
+        sub = QLabel("Đăng ký, gia hạn, huỷ gói và check-in hội viên")
         sub.setObjectName("pageSubtitle")
 
         text_col = QVBoxLayout()
@@ -574,35 +645,40 @@ class SubscriptionPage(QWidget):
         hdr.addStretch()
         return hdr
 
-    # ── Slots ─────────────────────────────────────────────────────────── #
+    # ── Slots ────────────────────────────────────────────────────────── #
 
     @Slot()
-    def _on_member_combo_changed(self) -> None:
-        """Khi chọn hội viên khác → tải lại bảng lịch sử."""
+    def _on_member_changed(self) -> None:
         member_id = self._reg_panel.selected_member_id()
         if member_id is None:
             self._sub_table.clear_table()
             return
         member_name = self._reg_panel._member_combo.currentText()
         self._sub_table.load_for_member(member_id, member_name)
-        self._status_lbl.setText(f"Đang xem gói tập của: {member_name}")
+        self._status_lbl.setText(f"Đang xem: {member_name}")
 
     @Slot(int, str, str)
-    def _on_subscription_created(
-        self, member_id: int, plan_type: str, customer_type: str
-    ) -> None:
-        """Sau khi đăng ký → refresh bảng lịch sử."""
-        member_name = self._reg_panel._member_combo.currentText()
-        self._sub_table.load_for_member(member_id, member_name)
+    def _on_sub_created(self, member_id: int, plan_type: str, ctype: str) -> None:
+        self._sub_table.load_for_member(member_id, self._reg_panel._member_combo.currentText())
+        self._status_lbl.setText("✅  Đăng ký gói thành công.")
+
+    @Slot(int)
+    def _on_sub_extended(self, member_id: int) -> None:
+        self._sub_table.load_for_member(member_id, self._reg_panel._member_combo.currentText())
+        self._status_lbl.setText("🔁  Gia hạn gói thành công.")
+
+    @Slot(int, str)
+    def _on_checkin_done(self, member_id: int, status: str) -> None:
+        icon = "✅" if status == "valid" else "⚠️"
         self._status_lbl.setText(
-            f"✅  Đã đăng ký gói thành công cho {member_name}."
+            f"{icon}  Check-in: {self._reg_panel._member_combo.currentText()} — {status}"
         )
+
+    @Slot()
+    def _on_sub_cancelled(self) -> None:
+        self._status_lbl.setText("🚫  Đã huỷ gói.")
 
     # ── Public API ────────────────────────────────────────────────────── #
 
     def refresh_members(self) -> None:
-        """
-        Gọi từ MainWindow khi danh sách hội viên thay đổi
-        (ví dụ sau khi thêm/xóa hội viên ở MemberPage).
-        """
         self._reg_panel.refresh_members()

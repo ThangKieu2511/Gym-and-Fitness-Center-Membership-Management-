@@ -1,19 +1,11 @@
 """
-controllers/subscription_controller.py  —  Phase 5
+controllers/subscription_controller.py  —  Phase 6
 
-Business logic cho Quản Lý Gói Tập & Đăng Ký Gói Hội Viên.
-
-Nghiệp vụ:
-  - Học sinh/Sinh viên: 180 000 đ/tháng
-  - Người lớn:          200 000 đ/tháng
-
-  Gói 1 tháng  → không tặng   (tổng 1 tháng)
-  Gói 3 tháng  → tặng 1 tháng (tổng 4 tháng)
-  Gói 6 tháng  → tặng 2 tháng (tổng 8 tháng)
-  Gói 12 tháng → tặng 3 tháng (tổng 15 tháng)
-
-  Giá = paid_months × đơn_giá_theo_loại_khách
-  Thời gian = (paid + bonus) × 30 ngày
+Thay đổi so với Phase 5:
+  • create_subscription(): nếu có gói active → gia hạn (extend) end_date thay vì tạo mới
+  • extend_subscription(): gia hạn gói active hiện tại, trả về sub_id
+  • cancel_subscription(): huỷ gói theo subscription_id
+  • checkin(): check-in thông minh — valid nếu có gói active, ngược lại expired
 """
 
 from __future__ import annotations
@@ -45,17 +37,7 @@ CUSTOMER_TYPE_LABEL: dict[str, str] = {
 }
 
 
-# ══════════════════════════════════════════════════════════════════════════ #
-#  SubscriptionController                                                    #
-# ══════════════════════════════════════════════════════════════════════════ #
-
 class SubscriptionController:
-    """
-    Cầu nối giữa UI đăng ký gói tập và tầng Database.
-
-    Không viết SQL trực tiếp — sử dụng Database API và _execute() nội bộ
-    chỉ cho trường hợp upsert bảng plans (không có sẵn trong public API).
-    """
 
     def __init__(self) -> None:
         self._db = Database()
@@ -64,10 +46,6 @@ class SubscriptionController:
 
     @staticmethod
     def get_plans() -> list[dict]:
-        """
-        Trả về danh sách tất cả 8 cấu hình gói (4 loại × 2 loại khách).
-        Dùng để hiển thị tuỳ chọn trên UI, không cần truy cập DB.
-        """
         result: list[dict] = []
         for plan_type, cfg in PLAN_CONFIG.items():
             total = cfg["paid"] + cfg["bonus"]
@@ -86,61 +64,44 @@ class SubscriptionController:
 
     @staticmethod
     def get_plan_preview(plan_type: str, customer_type: str) -> dict:
-        """
-        Tính xem trước thông tin gói: giá, ngày kết thúc.
-
-        Parameters
-        ----------
-        plan_type     : "1_month" | "3_month" | "6_month" | "12_month"
-        customer_type : "student" | "adult"
-
-        Returns
-        -------
-        dict với các key:
-            price, start_date, end_date, total_months,
-            paid_months, bonus_months, price_per_month
-        """
         cfg           = PLAN_CONFIG[plan_type]
         price_monthly = PRICE_PER_MONTH[customer_type]
         price         = cfg["paid"] * price_monthly
         total_months  = cfg["paid"] + cfg["bonus"]
         start         = date.today()
         end           = start + timedelta(days=total_months * 30)
-
         return {
-            "price":         price,
+            "price":           price,
             "price_per_month": price_monthly,
-            "paid_months":   cfg["paid"],
-            "bonus_months":  cfg["bonus"],
-            "total_months":  total_months,
-            "start_date":    start.isoformat(),
-            "end_date":      end.isoformat(),
+            "paid_months":     cfg["paid"],
+            "bonus_months":    cfg["bonus"],
+            "total_months":    total_months,
+            "start_date":      start.isoformat(),
+            "end_date":        end.isoformat(),
         }
 
     # ── Helpers nội bộ ──────────────────────────────────────────────── #
 
     def _get_or_create_plan(self, plan_type: str, customer_type: str) -> int:
-        """
-        Tìm hoặc tạo bản ghi plans trong DB theo (plan_type, customer_type).
-        Trả về plan_id.
-        """
-        cfg         = PLAN_CONFIG[plan_type]
-        ctype_label = CUSTOMER_TYPE_LABEL[customer_type]
-        plan_name   = f"{cfg['label']} — {ctype_label}"
-        price       = cfg["paid"] * PRICE_PER_MONTH[customer_type]
+        cfg          = PLAN_CONFIG[plan_type]
+        ctype_label  = CUSTOMER_TYPE_LABEL[customer_type]
+        plan_name    = f"{cfg['label']} — {ctype_label}"
+        price        = cfg["paid"] * PRICE_PER_MONTH[customer_type]
         total_months = cfg["paid"] + cfg["bonus"]
         duration_days = total_months * 30
 
         existing = self._db.get_plan_by_name(plan_name)
-
         if existing:
             return existing["id"]
 
-        # Tạo mới nếu chưa có
         return self._db._execute(
             "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
             (plan_name, duration_days, price),
         )
+
+    def _duration_days(self, plan_type: str) -> int:
+        cfg = PLAN_CONFIG[plan_type]
+        return (cfg["paid"] + cfg["bonus"]) * 30
 
     # ── Public API ──────────────────────────────────────────────────── #
 
@@ -151,22 +112,10 @@ class SubscriptionController:
         customer_type: str,
     ) -> int:
         """
-        Tạo và lưu gói đăng ký cho hội viên.
+        Tạo gói mới hoặc gia hạn nếu đã có gói active.
 
-        Parameters
-        ----------
-        member_id     : ID hội viên
-        plan_type     : "1_month" | "3_month" | "6_month" | "12_month"
-        customer_type : "student" | "adult"
-
-        Returns
-        -------
-        int — ID subscription vừa tạo
-
-        Raises
-        ------
-        ValueError       — nếu tham số không hợp lệ
-        RuntimeError     — nếu gặp lỗi DB
+        - Có gói active  → extend end_date, KHÔNG tạo bản ghi mới
+        - Chưa có gói    → tạo subscription mới bắt đầu từ hôm nay
         """
         if plan_type not in PLAN_CONFIG:
             raise ValueError(f"Loại gói không hợp lệ: {plan_type!r}")
@@ -175,40 +124,108 @@ class SubscriptionController:
         if not member_id:
             raise ValueError("Chưa chọn hội viên.")
 
-
-        # 1 người có thể đăng kí 1 gói hoặc là gói liên tiếp nhau  
-        active = self._db.get_active_subscription(member_id)
-
-        if active and active.get("end_date"):
-            start_date = active["end_date"]
-        else:
-            start_date = date.today().isoformat()
-
-        plan_id = self._get_or_create_plan(plan_type, customer_type)
-
-        sub_id = self._db.add_subscription(
-            member_id,
-            plan_id,
-            start_date=start_date
-        )
-        
         try:
-            plan_id = self._get_or_create_plan(plan_type, customer_type)
-            sub_id  = self._db.add_subscription(member_id, plan_id)
-            return sub_id
+            active = self._db.get_active_subscription(member_id)
+
+            if active:
+                # ── Gia hạn: cộng thêm duration vào end_date hiện tại ──
+                extra_days = self._duration_days(plan_type)
+                old_end    = date.fromisoformat(active["end_date"])
+                new_end    = old_end + timedelta(days=extra_days)
+                self._db._execute(
+                    "UPDATE subscriptions SET end_date = ? WHERE id = ?",
+                    (new_end.isoformat(), active["id"]),
+                )
+                return active["id"]
+            else:
+                # ── Đăng ký mới ──
+                plan_id = self._get_or_create_plan(plan_type, customer_type)
+                return self._db.add_subscription(member_id, plan_id)
+
         except sqlite3.Error as exc:
             raise RuntimeError(f"Lỗi khi lưu gói đăng ký: {exc}") from exc
 
+    def extend_subscription(
+        self,
+        member_id: int,
+        plan_type: str,
+        customer_type: str,
+    ) -> int:
+        """
+        Gia hạn tường minh gói active của hội viên.
+        Luôn cộng thêm duration vào end_date hiện tại (không tạo bản ghi mới).
+
+        Raises ValueError nếu hội viên không có gói active.
+        """
+        if plan_type not in PLAN_CONFIG:
+            raise ValueError(f"Loại gói không hợp lệ: {plan_type!r}")
+        if customer_type not in PRICE_PER_MONTH:
+            raise ValueError(f"Loại khách không hợp lệ: {customer_type!r}")
+
+        active = self._db.get_active_subscription(member_id)
+        if not active:
+            raise ValueError(
+                "Hội viên chưa có gói đang hiệu lực.\n"
+                "Vui lòng đăng ký gói mới thay vì gia hạn."
+            )
+
+        try:
+            extra_days = self._duration_days(plan_type)
+            old_end    = date.fromisoformat(active["end_date"])
+            new_end    = old_end + timedelta(days=extra_days)
+            self._db._execute(
+                "UPDATE subscriptions SET end_date = ? WHERE id = ?",
+                (new_end.isoformat(), active["id"]),
+            )
+            return active["id"]
+        except sqlite3.Error as exc:
+            raise RuntimeError(f"Lỗi khi gia hạn gói: {exc}") from exc
+
+    def cancel_subscription(self, subscription_id: int) -> bool:
+        """
+        Huỷ gói theo subscription_id. Trả về True nếu thành công.
+        Raises ValueError nếu không tìm thấy sub hoặc gói đã bị huỷ/hết hạn.
+        """
+        try:
+            result = self._db.cancel_subscription(subscription_id)
+            if not result:
+                raise ValueError("Không tìm thấy gói đăng ký.")
+            return True
+        except sqlite3.Error as exc:
+            raise RuntimeError(f"Lỗi khi huỷ gói: {exc}") from exc
+
+    def checkin(self, member_id: int) -> dict:
+        """
+        Check-in thông minh.
+
+        Returns
+        -------
+        dict với keys:
+            status  : "valid" | "expired"
+            message : Chuỗi thông báo hiển thị cho user
+            checkin_id : ID bản ghi check-in vừa tạo
+        """
+        active = self._db.get_active_subscription(member_id)
+        status = "valid" if active else "expired"
+
+        checkin_id = self._db.add_checkin(member_id, status=status)
+
+        if status == "valid":
+            message = (
+                f"✅  Check-in thành công!\n"
+                f"Gói: {active['plan_name']}\n"
+                f"Hết hạn: {active['end_date']}"
+            )
+        else:
+            message = "⚠️  Hội viên không có gói đang hiệu lực."
+
+        return {"status": status, "message": message, "checkin_id": checkin_id}
+
     def get_member_subscriptions(self, member_id: int) -> list[dict]:
-        """
-        Trả về tất cả gói đã đăng ký của hội viên.
-        Tự động cập nhật trạng thái expired trước khi trả về.
-        """
         self._db.expire_outdated_subscriptions()
         return self._db.get_subscriptions(member_id)
 
     def get_all_members(self) -> list[dict]:
-        """Trả về danh sách hội viên để hiển thị trong dropdown."""
         rows = self._db._execute(
             "SELECT id, name, phone FROM members ORDER BY name",
             fetch="all",
