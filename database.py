@@ -153,7 +153,7 @@ class Database:
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 member_id    INTEGER NOT NULL,
                 checkin_time TEXT,
-                status       TEXT CHECK(status IN ('valid', 'expired')),
+                status TEXT CHECK(status IN ('valid', 'expired')),
                 FOREIGN KEY (member_id) REFERENCES members(id)
                     ON DELETE CASCADE ON UPDATE CASCADE
             )
@@ -413,6 +413,19 @@ class Database:
             fetch="one",
         )
 
+
+    def get_plan_by_name(self, name: str):
+        return self._execute(
+            "SELECT * FROM plans WHERE name = ?",
+            (name,),
+            fetch="one"
+        )
+
+    def create_plan(self, name: str, duration: int, price: float):
+        return self._execute(
+            "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
+            (name, duration, price)
+        )
     def update_plan(self, plan_id: int, name: str, duration: int, price: float) -> bool:
         """Update a plan's details. Returns ``True`` if a row was modified."""
         try:
@@ -565,7 +578,7 @@ class Database:
         self,
         member_id: int,
         checkin_time: str = "",
-        status: str = "present",
+        status: str = "valid",
     ) -> int:
 
         if not checkin_time:

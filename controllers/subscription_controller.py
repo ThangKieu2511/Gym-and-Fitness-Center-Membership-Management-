@@ -131,11 +131,8 @@ class SubscriptionController:
         total_months = cfg["paid"] + cfg["bonus"]
         duration_days = total_months * 30
 
-        existing = self._db._execute(
-            "SELECT id FROM plans WHERE name = ?",
-            (plan_name,),
-            fetch="one",
-        )
+        existing = self._db.get_plan_by_name(plan_name)
+
         if existing:
             return existing["id"]
 
@@ -178,6 +175,23 @@ class SubscriptionController:
         if not member_id:
             raise ValueError("Chưa chọn hội viên.")
 
+
+        # 1 người có thể đăng kí 1 gói hoặc là gói liên tiếp nhau  
+        active = self._db.get_active_subscription(member_id)
+
+        if active and active.get("end_date"):
+            start_date = active["end_date"]
+        else:
+            start_date = date.today().isoformat()
+
+        plan_id = self._get_or_create_plan(plan_type, customer_type)
+
+        sub_id = self._db.add_subscription(
+            member_id,
+            plan_id,
+            start_date=start_date
+        )
+        
         try:
             plan_id = self._get_or_create_plan(plan_type, customer_type)
             sub_id  = self._db.add_subscription(member_id, plan_id)
