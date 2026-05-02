@@ -1,17 +1,18 @@
 """
-ui/subscription_page.py  —  Phase 6
+ui/subscription_page.py  —  Phase 7
 
-Thay đổi so với Phase 5:
-  • RegistrationPanel: thêm nút "Gia Hạn" (extend) + "Check-in"
-  • SubscriptionTable: thêm nút "Huỷ Gói" per-row (chỉ active mới cho huỷ)
-  • Tất cả thao tác đều auto-refresh bảng sau khi thành công
+Thay đổi so với Phase 6:
+  • _on_checkin(): chống spam (disable 2s), hiển thị dialog theo màu 3 trạng thái
+  • Tooltip mô tả 3 trạng thái cho nút Check-in
+  • _on_checkin_done(): status bar màu xanh/vàng/đỏ, tự reset sau 5 giây
+  • Thêm QTimer vào import
 """
 
 from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtCore import Qt, Signal, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -193,6 +194,13 @@ class RegistrationPanel(QWidget):
         self._btn_checkin.setMinimumHeight(38)
         self._btn_checkin.setCursor(Qt.PointingHandCursor)
         self._btn_checkin.clicked.connect(self._on_checkin)
+        # Tooltip mô tả 3 trạng thái
+        self._btn_checkin.setToolTip(
+            "Ghi nhận lượt tập hôm nay.\n"
+            "✅  Hợp lệ nếu có gói đang active\n"
+            "⚠️  Cảnh báo nếu gói đã hết hạn\n"
+            "❌  Từ chối nếu chưa đăng ký gói"
+        )
         root.addWidget(self._btn_checkin)
 
         # Làm mới danh sách
@@ -376,19 +384,28 @@ class RegistrationPanel(QWidget):
         if member_id is None:
             return
 
-        member_name = self._member_combo.currentText()
+        # ── Chống spam: disable nút, tự re-enable sau 2 giây ──
+        self._btn_checkin.setEnabled(False)
+        QTimer.singleShot(2000, lambda: self._btn_checkin.setEnabled(True))
+
         try:
             result = self._controller.checkin(member_id)
         except Exception as exc:
             QMessageBox.critical(self, "❌  Lỗi Check-in", str(exc))
+            self._btn_checkin.setEnabled(True)  # khôi phục ngay nếu lỗi DB
             return
 
-        if result["status"] == "valid":
-            QMessageBox.information(self, "✅  Check-in", result["message"])
-        else:
-            QMessageBox.warning(self, "⚠️  Check-in", result["message"])
+        status = result["status"]
 
-        self.checkin_done.emit(member_id, result["status"])
+        # ── Dialog màu theo trạng thái ──
+        if status == "valid":
+            QMessageBox.information(self, "✅  Check-in Thành Công", result["message"])
+        elif status == "expired":
+            QMessageBox.warning(self, "⚠️  Gói Đã Hết Hạn", result["message"])
+        else:  # no_subscription
+            QMessageBox.critical(self, "❌  Chưa Có Gói Tập", result["message"])
+
+        self.checkin_done.emit(member_id, status)
 
     # ── Public API ────────────────────────────────────────────────────── #
 
@@ -673,9 +690,29 @@ class SubscriptionPage(QWidget):
 
     @Slot(int, str)
     def _on_checkin_done(self, member_id: int, status: str) -> None:
-        icon = "✅" if status == "valid" else "⚠️"
-        self._status_lbl.setText(
-            f"{icon}  Check-in: {self._reg_panel._member_combo.currentText()} — {status}"
+        name = self._reg_panel._member_combo.currentText()
+
+        # ── Màu + text theo 3 trạng thái ──
+        if status == "valid":
+            text  = f"✅  Check-in thành công — {name}"
+            color = "#22c55e"   # xanh lá
+        elif status == "expired":
+            text  = f"⚠️  Gói hết hạn — {name}"
+            color = "#f59e0b"   # vàng amber
+        else:  # no_subscription
+            text  = f"❌  Chưa đăng ký gói — {name}"
+            color = "#ef4444"   # đỏ
+
+        self._status_lbl.setText(text)
+        self._status_lbl.setStyleSheet(f"color: {color}; font-weight: 600;")
+
+        # Reset về mặc định sau 5 giây
+        QTimer.singleShot(
+            5000,
+            lambda: (
+                self._status_lbl.setStyleSheet(""),
+                self._status_lbl.setText("Chọn hội viên và gói tập để bắt đầu."),
+            ),
         )
 
     @Slot()

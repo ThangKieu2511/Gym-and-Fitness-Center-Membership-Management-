@@ -1,11 +1,11 @@
 """
-controllers/subscription_controller.py  —  Phase 6
+controllers/subscription_controller.py  —  Phase 7
 
-Thay đổi so với Phase 5:
-  • create_subscription(): nếu có gói active → gia hạn (extend) end_date thay vì tạo mới
-  • extend_subscription(): gia hạn gói active hiện tại, trả về sub_id
-  • cancel_subscription(): huỷ gói theo subscription_id
-  • checkin(): check-in thông minh — valid nếu có gói active, ngược lại expired
+Thay đổi so với Phase 6:
+  • checkin(): 3 trạng thái rõ ràng
+      - "valid"           → có gói active → lưu DB
+      - "expired"         → từng có gói nhưng hết hạn / bị huỷ
+      - "no_subscription" → chưa bao giờ đăng ký
 """
 
 from __future__ import annotations
@@ -196,30 +196,51 @@ class SubscriptionController:
 
     def checkin(self, member_id: int) -> dict:
         """
-        Check-in thông minh.
+        Check-in thông minh — 3 trạng thái:
+
+          • "valid"           → có gói active → lưu check-in vào DB
+          • "expired"         → từng có gói nhưng đã hết hạn / bị huỷ
+          • "no_subscription" → chưa bao giờ đăng ký gói nào
 
         Returns
         -------
         dict với keys:
-            status  : "valid" | "expired"
-            message : Chuỗi thông báo hiển thị cho user
-            checkin_id : ID bản ghi check-in vừa tạo
+            status     : "valid" | "expired" | "no_subscription"
+            message    : Chuỗi thông báo hiển thị cho user
+            checkin_id : ID bản ghi check-in vừa tạo (None nếu không valid)
         """
+        # Tự expire các gói quá hạn trước khi kiểm tra
+        self._db.expire_outdated_subscriptions()
+
         active = self._db.get_active_subscription(member_id)
-        status = "valid" if active else "expired"
 
-        checkin_id = self._db.add_checkin(member_id, status=status)
-
-        if status == "valid":
+        if active:
+            # ── Hợp lệ: lưu check-in ──
+            checkin_id = self._db.add_checkin(member_id, status="valid")
             message = (
                 f"✅  Check-in thành công!\n"
                 f"Gói: {active['plan_name']}\n"
                 f"Hết hạn: {active['end_date']}"
             )
-        else:
-            message = "⚠️  Hội viên không có gói đang hiệu lực."
+            return {"status": "valid", "message": message, "checkin_id": checkin_id}
 
-        return {"status": status, "message": message, "checkin_id": checkin_id}
+        # Phân biệt: đã từng có gói (expired) hay chưa bao giờ đăng ký
+        has_any = self._db._execute(
+            "SELECT id FROM subscriptions WHERE member_id = ? LIMIT 1",
+            (member_id,),
+            fetch="one",
+        )
+
+        if has_any:
+            # Có gói nhưng tất cả đã hết hạn hoặc bị huỷ
+            checkin_id = self._db.add_checkin(member_id, status="expired")
+            message = "⚠️  Gói tập đã hết hạn.\nVui lòng gia hạn để tiếp tục tập."
+            return {"status": "expired", "message": message, "checkin_id": checkin_id}
+        else:
+            # Chưa bao giờ đăng ký
+            checkin_id = self._db.add_checkin(member_id, status="no_subscription")
+            message = "❌  Hội viên chưa đăng ký gói tập nào.\nVui lòng đăng ký gói mới."
+            return {"status": "no_subscription", "message": message, "checkin_id": checkin_id}
 
     def get_member_subscriptions(self, member_id: int) -> list[dict]:
         self._db.expire_outdated_subscriptions()
