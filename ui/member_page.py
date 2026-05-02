@@ -431,7 +431,7 @@ class MemberPage(QWidget):
     @Slot(str)
     def _on_search_text_changed(self, _text: str) -> None:
         """Mỗi lần text thay đổi → reset timer debounce."""
-        self._search_timer.start()      # restart = debounce
+        self._search_timer.start()      # Reset lại time sau khi gõ
 
     @Slot()
     def _on_refresh(self) -> None:

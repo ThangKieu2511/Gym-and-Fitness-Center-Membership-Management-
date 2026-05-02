@@ -1,12 +1,16 @@
 """
-ui/main_window.py
+ui/main_window.py  —  Phase 5
 Application shell — sidebar navigation + central stacked area.
+
+Thay đổi so với Phase 4:
+  • Thêm nav button "Gói Tập" → SubscriptionPage (index 1)
+  • Kết nối data_changed từ MemberPage → SubscriptionPage.refresh_members()
+    để dropdown hội viên luôn được đồng bộ sau CRUD
 """
 
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -20,11 +24,12 @@ from PySide6.QtWidgets import (
 )
 
 from ui.member_page import MemberPage
+from ui.subscription_page import SubscriptionPage
 
 
-# ══════════════════════════════════════════════════════════════════════════════ #
-#  Sidebar nav button                                                           #
-# ══════════════════════════════════════════════════════════════════════════════ #
+# ══════════════════════════════════════════════════════════════════════════ #
+#  Sidebar nav button                                                        #
+# ══════════════════════════════════════════════════════════════════════════ #
 
 class NavButton(QPushButton):
     def __init__(self, icon: str, label: str, parent: QWidget | None = None):
@@ -43,26 +48,30 @@ class NavButton(QPushButton):
         self.style().polish(self)
 
 
-# ══════════════════════════════════════════════════════════════════════════════ #
-#  Main Window                                                                  #
-# ══════════════════════════════════════════════════════════════════════════════ #
+# ══════════════════════════════════════════════════════════════════════════ #
+#  Main Window                                                               #
+# ══════════════════════════════════════════════════════════════════════════ #
 
 class MainWindow(QMainWindow):
     """
     Application shell.
-    Left: fixed sidebar with navigation.
+    Left : fixed sidebar with navigation.
     Right: QStackedWidget for page switching.
+
+    Pages:
+      0 — MemberPage       (Hội Viên)
+      1 — SubscriptionPage (Gói Tập)
     """
 
     def __init__(self):
         super().__init__()
         self.setWindowTitle("GymTK — Hệ Thống Quản Lý Phòng Tập")
-        self.setMinimumSize(1000, 640)
-        self.resize(1200, 740)
+        self.setMinimumSize(1100, 660)
+        self.resize(1280, 780)
         self._setup_ui()
-        self._navigate(0)      # Default to Members page
+        self._navigate(0)   # Mặc định → trang Hội Viên
 
-    # ── Layout ──────────────────────────────────────────────────────────── #
+    # ── Layout ───────────────────────────────────────────────────────── #
 
     def _setup_ui(self):
         central = QWidget()
@@ -74,6 +83,12 @@ class MainWindow(QMainWindow):
 
         root.addWidget(self._build_sidebar())
         root.addWidget(self._build_content())
+
+        # ── Kết nối tín hiệu liên trang ──
+        # Khi thêm/sửa/xóa hội viên → cập nhật dropdown hội viên ở SubscriptionPage
+        self._member_page.data_changed.connect(
+            self._subscription_page.refresh_members
+        )
 
     def _build_sidebar(self) -> QWidget:
         sidebar = QWidget()
@@ -87,8 +102,10 @@ class MainWindow(QMainWindow):
         # ── Brand ──
         brand_icon = QLabel("🏋️")
         brand_icon.setObjectName("pageIcon")
+
         app_name = QLabel("GymTK")
         app_name.setObjectName("appName")
+
         tagline = QLabel("Quản Lý Phòng Tập")
         tagline.setObjectName("appTagline")
 
@@ -120,19 +137,25 @@ class MainWindow(QMainWindow):
         layout.addWidget(sec)
         layout.addSpacing(6)
 
-        # ── Nút điều hướng ──
+        # ── Danh sách nút nav ──
         self._nav_buttons: list[NavButton] = []
-        self._pages: list[QWidget] = []   # filled in _build_content
 
+        # Hội Viên (index 0)
         self.nav_members = NavButton("👥", "Hội Viên")
         self.nav_members.clicked.connect(lambda: self._navigate(0))
         self._nav_buttons.append(self.nav_members)
         layout.addWidget(self.nav_members)
 
+        # Gói Tập (index 1)
+        self.nav_subscriptions = NavButton("🎫", "Gói Tập")
+        self.nav_subscriptions.clicked.connect(lambda: self._navigate(1))
+        self._nav_buttons.append(self.nav_subscriptions)
+        layout.addWidget(self.nav_subscriptions)
+
         layout.addStretch()
 
         # ── Chân trang sidebar ──
-        footer = QLabel("Giai Đoạn 3 — CRUD Hội Viên")
+        footer = QLabel("Giai Đoạn 5 — Quản Lý Gói Tập")
         footer.setObjectName("appTagline")
         footer.setAlignment(Qt.AlignCenter)
         layout.addWidget(footer)
@@ -150,14 +173,16 @@ class MainWindow(QMainWindow):
         self.stack = QStackedWidget()
         layout.addWidget(self.stack)
 
-        # ── Pages ──
-        self._member_page = MemberPage()
+        # ── Pages (thứ tự phải khớp với chỉ số trong _navigate) ──
+        self._member_page = MemberPage()           # index 0
         self.stack.addWidget(self._member_page)
-        self._pages.append(self._member_page)
+
+        self._subscription_page = SubscriptionPage()  # index 1
+        self.stack.addWidget(self._subscription_page)
 
         return area
 
-    # ── Navigation ──────────────────────────────────────────────────────── #
+    # ── Navigation ───────────────────────────────────────────────────── #
 
     def _navigate(self, index: int):
         self.stack.setCurrentIndex(index)
