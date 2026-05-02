@@ -432,7 +432,11 @@ class SubscriptionTable(QWidget):
         root.addLayout(hdr)
 
         self._table = QTableWidget(0, len(SUB_COLS))
+        self._table.setColumnWidth(COL_ACTION, 110)
         self._table.setHorizontalHeaderLabels(SUB_COLS)
+
+        self._table.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
+
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
         self._table.setAlternatingRowColors(True)
@@ -446,8 +450,8 @@ class SubscriptionTable(QWidget):
         hh.setSectionResizeMode(COL_PRICE,  QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(COL_START,  QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(COL_END,    QHeaderView.ResizeToContents)
-        hh.setSectionResizeMode(COL_STATUS, QHeaderView.Stretch)
-        hh.setSectionResizeMode(COL_ACTION, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(COL_STATUS, QHeaderView.ResizeToContents)
+        hh.setSectionResizeMode(COL_ACTION, QHeaderView.Fixed)
 
         root.addWidget(self._table, stretch=1)
 
@@ -492,7 +496,7 @@ class SubscriptionTable(QWidget):
             self._cell(row_idx, COL_IDX,   str(row_idx + 1), Qt.AlignCenter)
             self._cell(row_idx, COL_PLAN,  s.get("plan_name", ""))
             price = s.get("price", 0) or 0
-            self._cell(row_idx, COL_PRICE, f"{price:,.0f}", Qt.AlignRight | Qt.AlignVCenter)
+            self._cell(row_idx, COL_PRICE, f"{price:,.0f}", Qt.AlignCenter)
             self._cell(row_idx, COL_START, s.get("start_date", ""), Qt.AlignCenter)
             self._cell(row_idx, COL_END,   s.get("end_date",   ""), Qt.AlignCenter)
             self._set_status_cell(row_idx, s.get("status", ""), s.get("end_date", ""), today)
