@@ -1,16 +1,14 @@
 """
-ui/subscription_page.py  —  Phase 7
+ui/subscription_page.py  —  Phase 9
 
-Thay đổi so với Phase 6:
-  • _on_checkin(): chống spam (disable 2s), hiển thị dialog theo màu 3 trạng thái
-  • Tooltip mô tả 3 trạng thái cho nút Check-in
-  • _on_checkin_done(): status bar màu xanh/vàng/đỏ, tự reset sau 5 giây
-  • Thêm QTimer vào import
+Thay đổi so với Phase 7:
+  • _on_checkin() giờ gọi CheckinController.checkin() trực tiếp
+    thay vì SubscriptionController.checkin() (đã bị xoá)
+  • Import thêm CheckinController
 """
 
 from __future__ import annotations
 from datetime import date, timedelta
-from datetime import date
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QColor
@@ -36,6 +34,8 @@ from controllers.subscription_controller import (
     PRICE_PER_MONTH,
     SubscriptionController,
 )
+# ← THÊM MỚI: import CheckinController
+from controllers.checkin_controller import CheckinController
 
 # ── Cột bảng ────────────────────────────────────────────────────────────── #
 SUB_COLS   = ["#", "Gói Tập", "Giá (đ)", "Ngày Bắt Đầu", "Ngày Kết Thúc", "Trạng Thái", ""]
@@ -45,7 +45,7 @@ COL_PRICE  = 2
 COL_START  = 3
 COL_END    = 4
 COL_STATUS = 5
-COL_ACTION = 6   # nút Huỷ
+COL_ACTION = 6
 
 PLAN_LABELS: dict[str, str] = {
     "1_month":  "1 Tháng",
@@ -120,13 +120,14 @@ class PreviewCard(QFrame):
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class RegistrationPanel(QWidget):
-    subscription_created  = Signal(int, str, str)   # member_id, plan_type, ctype
-    subscription_extended = Signal(int)              # member_id
-    checkin_done          = Signal(int, str)         # member_id, status
+    subscription_created  = Signal(int, str, str)
+    subscription_extended = Signal(int)
+    checkin_done          = Signal(int, str)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._controller = SubscriptionController()
+        self._controller         = SubscriptionController()
+        self._checkin_controller = CheckinController()   # ← THÊM MỚI
         self._setup_ui()
         self._refresh_members()
 
@@ -141,7 +142,6 @@ class RegistrationPanel(QWidget):
         pnl_title.setObjectName("panelTitle")
         root.addWidget(pnl_title)
 
-        # Chọn hội viên
         root.addWidget(self._section_label("Hội Viên"))
         self._member_combo = QComboBox()
         self._member_combo.setPlaceholderText("— Chọn hội viên —")
@@ -149,7 +149,6 @@ class RegistrationPanel(QWidget):
         self._member_combo.currentIndexChanged.connect(self._on_selection_changed)
         root.addWidget(self._member_combo)
 
-        # Loại khách
         root.addWidget(self._section_label("Loại Khách"))
         self._ctype_combo = QComboBox()
         for key in CTYPE_KEYS:
@@ -157,7 +156,6 @@ class RegistrationPanel(QWidget):
         self._ctype_combo.currentIndexChanged.connect(self._on_selection_changed)
         root.addWidget(self._ctype_combo)
 
-        # Loại gói
         root.addWidget(self._section_label("Gói Tập"))
         self._plan_combo = QComboBox()
         for key in PLAN_KEYS:
@@ -165,14 +163,11 @@ class RegistrationPanel(QWidget):
         self._plan_combo.currentIndexChanged.connect(self._on_selection_changed)
         root.addWidget(self._plan_combo)
 
-        # Preview
         self._preview = PreviewCard()
         root.addWidget(self._preview)
 
-        # ── Nhóm nút hành động ──
         root.addWidget(self._section_label("Thao Tác"))
 
-        # Đăng ký mới
         self._btn_register = QPushButton("✅  Đăng Ký Gói Mới")
         self._btn_register.setObjectName("btnPrimary")
         self._btn_register.setMinimumHeight(38)
@@ -180,7 +175,6 @@ class RegistrationPanel(QWidget):
         self._btn_register.clicked.connect(self._on_register)
         root.addWidget(self._btn_register)
 
-        # Gia hạn
         self._btn_extend = QPushButton("🔁  Gia Hạn Gói Hiện Tại")
         self._btn_extend.setObjectName("btnSecondary")
         self._btn_extend.setMinimumHeight(38)
@@ -188,13 +182,11 @@ class RegistrationPanel(QWidget):
         self._btn_extend.clicked.connect(self._on_extend)
         root.addWidget(self._btn_extend)
 
-        # Check-in
         self._btn_checkin = QPushButton("🏃  Check-in")
         self._btn_checkin.setObjectName("btnNeutral")
         self._btn_checkin.setMinimumHeight(38)
         self._btn_checkin.setCursor(Qt.PointingHandCursor)
         self._btn_checkin.clicked.connect(self._on_checkin)
-        # Tooltip mô tả 3 trạng thái
         self._btn_checkin.setToolTip(
             "Ghi nhận lượt tập hôm nay.\n"
             "✅  Hợp lệ nếu có gói đang active\n"
@@ -203,7 +195,6 @@ class RegistrationPanel(QWidget):
         )
         root.addWidget(self._btn_checkin)
 
-        # Làm mới danh sách
         self._btn_reload = QPushButton("🔄  Làm Mới Danh Sách")
         self._btn_reload.setObjectName("btnNeutral")
         self._btn_reload.setMinimumHeight(34)
@@ -212,7 +203,6 @@ class RegistrationPanel(QWidget):
         root.addWidget(self._btn_reload)
 
         root.addStretch()
-        self._update_preview()
 
     @staticmethod
     def _section_label(text: str) -> QLabel:
@@ -282,13 +272,12 @@ class RegistrationPanel(QWidget):
         if member_id is None:
             return
 
-        plan_type    = self._current_plan_type()
-        ctype        = self._current_ctype()
-        preview      = SubscriptionController.get_plan_preview(plan_type, ctype)
-        member_name  = self._member_combo.currentText()
-        plan_label   = PLAN_LABELS[plan_type]
+        plan_type   = self._current_plan_type()
+        ctype       = self._current_ctype()
+        preview     = SubscriptionController.get_plan_preview(plan_type, ctype)
+        member_name = self._member_combo.currentText()
+        plan_label  = PLAN_LABELS[plan_type]
 
-        # Cảnh báo nếu đang có gói active
         active = self._controller._db.get_active_subscription(member_id)
         extra_msg = ""
         if active:
@@ -336,7 +325,6 @@ class RegistrationPanel(QWidget):
         member_name = self._member_combo.currentText()
         plan_label  = PLAN_LABELS[plan_type]
 
-        # Kiểm tra trước — cần có gói active
         active = self._controller._db.get_active_subscription(member_id)
         if not active:
             QMessageBox.warning(
@@ -384,25 +372,25 @@ class RegistrationPanel(QWidget):
         if member_id is None:
             return
 
-        # ── Chống spam: disable nút, tự re-enable sau 2 giây ──
+        # Chống spam: disable 2 giây
         self._btn_checkin.setEnabled(False)
         QTimer.singleShot(2000, lambda: self._btn_checkin.setEnabled(True))
 
         try:
-            result = self._controller.checkin(member_id)
+            # ← GỌI CheckinController thay vì SubscriptionController
+            result = self._checkin_controller.checkin(member_id)
         except Exception as exc:
             QMessageBox.critical(self, "❌  Lỗi Check-in", str(exc))
-            self._btn_checkin.setEnabled(True)  # khôi phục ngay nếu lỗi DB
+            self._btn_checkin.setEnabled(True)
             return
 
         status = result["status"]
 
-        # ── Dialog màu theo trạng thái ──
         if status == "valid":
             QMessageBox.information(self, "✅  Check-in Thành Công", result["message"])
         elif status == "expired":
             QMessageBox.warning(self, "⚠️  Gói Đã Hết Hạn", result["message"])
-        else:  # no_subscription
+        else:
             QMessageBox.critical(self, "❌  Chưa Có Gói Tập", result["message"])
 
         self.checkin_done.emit(member_id, status)
@@ -421,7 +409,6 @@ class RegistrationPanel(QWidget):
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class SubscriptionTable(QWidget):
-    # Emit khi người dùng huỷ gói thành công → SubscriptionPage refresh
     subscription_cancelled = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -429,7 +416,6 @@ class SubscriptionTable(QWidget):
         self._controller  = SubscriptionController()
         self._member_id: int | None = None
         self._member_name: str = ""
-        # Cache sub_id theo row để nút Huỷ biết huỷ cái nào
         self._sub_ids: list[int] = []
         self._setup_ui()
 
@@ -451,9 +437,7 @@ class SubscriptionTable(QWidget):
         self._table = QTableWidget(0, len(SUB_COLS))
         self._table.setColumnWidth(COL_ACTION, 110)
         self._table.setHorizontalHeaderLabels(SUB_COLS)
-
         self._table.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
-
         self._table.setEditTriggers(QTableWidget.NoEditTriggers)
         self._table.setSelectionBehavior(QTableWidget.SelectRows)
         self._table.setAlternatingRowColors(True)
@@ -472,8 +456,6 @@ class SubscriptionTable(QWidget):
 
         root.addWidget(self._table, stretch=1)
 
-    # ── Data ─────────────────────────────────────────────────────────── #
-
     def load_for_member(self, member_id: int, member_name: str = "") -> None:
         self._member_id   = member_id
         self._member_name = member_name
@@ -488,7 +470,6 @@ class SubscriptionTable(QWidget):
         self._populate(subs)
 
     def refresh(self) -> None:
-        """Tải lại dữ liệu của member_id hiện tại."""
         if self._member_id is not None:
             self.load_for_member(self._member_id, self._member_name)
 
@@ -518,14 +499,12 @@ class SubscriptionTable(QWidget):
             self._cell(row_idx, COL_END,   s.get("end_date",   ""), Qt.AlignCenter)
             self._set_status_cell(row_idx, s.get("status", ""), s.get("end_date", ""), today)
 
-            # ── Nút Huỷ — chỉ hiện cho gói active ──
             status = s.get("status", "")
             if status == "active":
                 btn = QPushButton("🚫  Huỷ")
                 btn.setObjectName("btnDanger")
                 btn.setFixedHeight(28)
                 btn.setCursor(Qt.PointingHandCursor)
-                # Dùng default arg để capture đúng giá trị lúc tạo
                 btn.clicked.connect(
                     lambda _, sid=s["id"], rname=s.get("plan_name", ""): self._on_cancel(sid, rname)
                 )
@@ -537,20 +516,14 @@ class SubscriptionTable(QWidget):
         count = len(subs)
         self._count_lbl.setText(f"{count} gói" if count else "Chưa có gói nào")
 
-    def _cell(
-        self,
-        row: int,
-        col: int,
-        text: str,
-        align: Qt.AlignmentFlag = Qt.AlignLeft | Qt.AlignVCenter,
-    ) -> QTableWidgetItem:
+    def _cell(self, row, col, text, align=Qt.AlignLeft | Qt.AlignVCenter):
         item = QTableWidgetItem(text or "")
         item.setTextAlignment(align)
         item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
         self._table.setItem(row, col, item)
         return item
 
-    def _set_status_cell(self, row: int, status: str, end_date: str, today: str) -> None:
+    def _set_status_cell(self, row, status, end_date, today) -> None:
         if status == "active":
             label, color = "✅  Đang Hiệu Lực", QColor("#22c55e")
         elif status == "cancelled":
@@ -563,8 +536,6 @@ class SubscriptionTable(QWidget):
         item.setForeground(color)
         item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
         self._table.setItem(row, COL_STATUS, item)
-
-    # ── Slot: huỷ gói ────────────────────────────────────────────────── #
 
     def _on_cancel(self, sub_id: int, plan_name: str) -> None:
         reply = QMessageBox.question(
@@ -636,7 +607,6 @@ class SubscriptionPage(QWidget):
         self._status_lbl.setObjectName("statusLabel")
         root.addWidget(self._status_lbl)
 
-        # ── Kết nối tín hiệu ──
         self._reg_panel._member_combo.currentIndexChanged.connect(self._on_member_changed)
         self._reg_panel.subscription_created.connect(self._on_sub_created)
         self._reg_panel.subscription_extended.connect(self._on_sub_extended)
@@ -666,8 +636,6 @@ class SubscriptionPage(QWidget):
         hdr.addStretch()
         return hdr
 
-    # ── Slots ────────────────────────────────────────────────────────── #
-
     @Slot()
     def _on_member_changed(self) -> None:
         member_id = self._reg_panel.selected_member_id()
@@ -691,24 +659,22 @@ class SubscriptionPage(QWidget):
     @Slot(int, str)
     def _on_checkin_done(self, member_id: int, status: str) -> None:
         self._sub_table.refresh()
-        name = self._reg_panel._member_combo.currentText()
+        name  = self._reg_panel._member_combo.currentText()
         today = date.today().strftime("%d/%m/%Y")
 
-        # ── Màu + text theo 3 trạng thái ──
         if status == "valid":
             text  = f"✅  Check-in thành công — {name} ({today})"
-            color = "#22c55e"   # xanh lá
+            color = "#22c55e"
         elif status == "expired":
             text  = f"⚠️  Gói hết hạn — {name}"
-            color = "#f59e0b"   # vàng amber
-        else:  # no_subscription
+            color = "#f59e0b"
+        else:
             text  = f"❌  Chưa đăng ký gói — {name}"
-            color = "#ef4444"   # đỏ
+            color = "#ef4444"
 
         self._status_lbl.setText(text)
         self._status_lbl.setStyleSheet(f"color: {color}; font-weight: 600;")
 
-        # Reset về mặc định sau 5 giây
         QTimer.singleShot(
             5000,
             lambda: (
@@ -720,8 +686,6 @@ class SubscriptionPage(QWidget):
     @Slot()
     def _on_sub_cancelled(self) -> None:
         self._status_lbl.setText("🚫  Đã huỷ gói.")
-
-    # ── Public API ────────────────────────────────────────────────────── #
 
     def refresh_members(self) -> None:
         self._reg_panel.refresh_members()

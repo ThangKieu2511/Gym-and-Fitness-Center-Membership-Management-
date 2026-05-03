@@ -1,11 +1,8 @@
 """
-ui/main_window.py  —  Phase 5
-Application shell — sidebar navigation + central stacked area.
+ui/main_window.py  —  Phase 9
 
-Thay đổi so với Phase 4:
-  • Thêm nav button "Gói Tập" → SubscriptionPage (index 1)
-  • Kết nối data_changed từ MemberPage → SubscriptionPage.refresh_members()
-    để dropdown hội viên luôn được đồng bộ sau CRUD
+Thay đổi so với Phase 8:
+  • Thêm nav button "QR Check-in" → QRCheckinPage (index 3)
 """
 
 from __future__ import annotations
@@ -26,6 +23,7 @@ from PySide6.QtWidgets import (
 from ui.dashboard_page import DashboardPage
 from ui.member_page import MemberPage
 from ui.subscription_page import SubscriptionPage
+from ui.qr_checkin_page import QRCheckinPage
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
@@ -63,6 +61,7 @@ class MainWindow(QMainWindow):
       0 — MemberPage       (Hội Viên)
       1 — SubscriptionPage (Gói Tập)
       2 — DashboardPage    (Dashboard)
+      3 — QRCheckinPage    (QR Check-in)
     """
 
     def __init__(self):
@@ -87,11 +86,9 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_content())
 
         # ── Kết nối tín hiệu liên trang ──
-        # Khi thêm/sửa/xóa hội viên → cập nhật dropdown hội viên ở SubscriptionPage
         self._member_page.data_changed.connect(
             self._subscription_page.refresh_members
         )
-        # Khi thêm/sửa/xóa hội viên → refresh dashboard
         self._member_page.data_changed.connect(
             self._dashboard_page.refresh_data
         )
@@ -164,10 +161,16 @@ class MainWindow(QMainWindow):
         self._nav_buttons.append(self.nav_dashboard)
         layout.addWidget(self.nav_dashboard)
 
+        # QR Check-in (index 3)
+        self.nav_qr = NavButton("📷", "QR Check-in")
+        self.nav_qr.clicked.connect(lambda: self._navigate(3))
+        self._nav_buttons.append(self.nav_qr)
+        layout.addWidget(self.nav_qr)
+
         layout.addStretch()
 
         # ── Chân trang sidebar ──
-        footer = QLabel("Giai Đoạn 8 — Dashboard")
+        footer = QLabel("Giai Đoạn 9 — QR Check-in")
         footer.setObjectName("appTagline")
         footer.setAlignment(Qt.AlignCenter)
         layout.addWidget(footer)
@@ -186,7 +189,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.stack)
 
         # ── Pages (thứ tự phải khớp với chỉ số trong _navigate) ──
-        self._member_page = MemberPage()           # index 0
+        self._member_page = MemberPage()              # index 0
         self.stack.addWidget(self._member_page)
 
         self._subscription_page = SubscriptionPage()  # index 1
@@ -195,14 +198,22 @@ class MainWindow(QMainWindow):
         self._dashboard_page = DashboardPage()        # index 2
         self.stack.addWidget(self._dashboard_page)
 
+        self._qr_page = QRCheckinPage()               # index 3
+        self.stack.addWidget(self._qr_page)
+
         return area
 
     # ── Navigation ───────────────────────────────────────────────────── #
 
     def _navigate(self, index: int):
+        # Dừng camera nếu rời khỏi trang QR
+        if hasattr(self, "_qr_page") and self.stack.currentIndex() == 3 and index != 3:
+            self._qr_page._on_stop()
+
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self._nav_buttons):
             btn.set_active(i == index)
+
         # Refresh dashboard mỗi lần chuyển sang trang
         if index == 2:
             self._dashboard_page.refresh_data()
