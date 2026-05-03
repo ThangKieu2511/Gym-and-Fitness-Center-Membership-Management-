@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ui.dashboard_page import DashboardPage
 from ui.member_page import MemberPage
 from ui.subscription_page import SubscriptionPage
 
@@ -61,6 +62,7 @@ class MainWindow(QMainWindow):
     Pages:
       0 — MemberPage       (Hội Viên)
       1 — SubscriptionPage (Gói Tập)
+      2 — DashboardPage    (Dashboard)
     """
 
     def __init__(self):
@@ -88,6 +90,10 @@ class MainWindow(QMainWindow):
         # Khi thêm/sửa/xóa hội viên → cập nhật dropdown hội viên ở SubscriptionPage
         self._member_page.data_changed.connect(
             self._subscription_page.refresh_members
+        )
+        # Khi thêm/sửa/xóa hội viên → refresh dashboard
+        self._member_page.data_changed.connect(
+            self._dashboard_page.refresh_data
         )
 
     def _build_sidebar(self) -> QWidget:
@@ -152,10 +158,16 @@ class MainWindow(QMainWindow):
         self._nav_buttons.append(self.nav_subscriptions)
         layout.addWidget(self.nav_subscriptions)
 
+        # Dashboard (index 2)
+        self.nav_dashboard = NavButton("📊", "Dashboard")
+        self.nav_dashboard.clicked.connect(lambda: self._navigate(2))
+        self._nav_buttons.append(self.nav_dashboard)
+        layout.addWidget(self.nav_dashboard)
+
         layout.addStretch()
 
         # ── Chân trang sidebar ──
-        footer = QLabel("Giai Đoạn 5 — Quản Lý Gói Tập")
+        footer = QLabel("Giai Đoạn 8 — Dashboard")
         footer.setObjectName("appTagline")
         footer.setAlignment(Qt.AlignCenter)
         layout.addWidget(footer)
@@ -180,6 +192,9 @@ class MainWindow(QMainWindow):
         self._subscription_page = SubscriptionPage()  # index 1
         self.stack.addWidget(self._subscription_page)
 
+        self._dashboard_page = DashboardPage()        # index 2
+        self.stack.addWidget(self._dashboard_page)
+
         return area
 
     # ── Navigation ───────────────────────────────────────────────────── #
@@ -188,3 +203,6 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self._nav_buttons):
             btn.set_active(i == index)
+        # Refresh dashboard mỗi lần chuyển sang trang
+        if index == 2:
+            self._dashboard_page.refresh_data()
