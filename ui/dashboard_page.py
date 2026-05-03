@@ -428,6 +428,8 @@ class DashboardPage(QWidget):
                     if combo.itemData(i) == current_id:
                         combo.setCurrentIndex(i)
                         break
+
+                self._load_member_history()
             elif all_members:
                 # Load history cho member đầu tiên mặc định
                 self._history_panel._combo.setCurrentIndex(0)
