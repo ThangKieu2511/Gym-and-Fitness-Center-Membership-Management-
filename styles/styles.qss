@@ -101,7 +101,8 @@ QWidget {
     border: 1px solid #2d3748;
     border-radius: 7px;
     padding: 0 14px;
-    font-weight: 500;
+    font-weight: 650;
+
 }
 #btnSecondary:hover   { background-color: #263047; color: #e2e8f0; }
 #btnSecondary:disabled { color: #374151; border-color: #1e2535; }
