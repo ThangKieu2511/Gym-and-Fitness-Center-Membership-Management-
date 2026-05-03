@@ -79,6 +79,8 @@ class QRController:
         if not ok:
             return False, None
 
+        frame = cv2.flip(frame, 1)  # lật ngang (mirror)
+
         member_id = self._decode_qr(frame)
         if member_id is not None and member_id != self._last_member_id:
             self._last_member_id = member_id
