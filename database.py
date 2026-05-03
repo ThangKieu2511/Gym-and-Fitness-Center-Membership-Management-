@@ -164,6 +164,10 @@ class Database:
             with self.connection:
                 for stmt in ddl_statements:
                     self.connection.execute(stmt)
+
+            self.connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_checkins_time ON checkins(checkin_time);"
+            )
             logger.info("All tables verified / created successfully.")
         except sqlite3.Error as exc:
             logger.exception("Error creating tables: %s", exc)
@@ -627,15 +631,17 @@ class Database:
     def get_today_checkins(self) -> list[dict]:
         """Return all check-ins that occurred today (local date)."""
         today = date.today().isoformat()
+        start = f"{today} 00:00:00"
+        end   = f"{today} 23:59:59"
         return self._execute(
             """
             SELECT c.*, m.name AS member_name
             FROM   checkins c
             JOIN   members  m ON m.id = c.member_id
-            WHERE  c.checkin_time LIKE ?
+            WHERE  c.checkin_time BETWEEN ? AND ?
             ORDER BY c.checkin_time DESC
             """,
-            (f"{today}%",),
+            (start,end),
             fetch="all",
         )
 
@@ -661,9 +667,12 @@ class Database:
             fetch="one",
         )["cnt"]
 
+        start = f"{today} 00:00:00"
+        end   = f"{today} 23:59:59"
+
         checkins_today = self._execute(
-            "SELECT COUNT(*) AS cnt FROM checkins WHERE checkin_time LIKE ?",
-            (f"{today}%",),
+            "SELECT COUNT(*) AS cnt FROM checkins WHERE checkin_time BETWEEN ? AND ?",
+            (start, end),
             fetch="one",
         )["cnt"]
 

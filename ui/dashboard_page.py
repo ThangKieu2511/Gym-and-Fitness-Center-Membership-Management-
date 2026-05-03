@@ -152,7 +152,7 @@ class TodayDetailTable(QWidget):
             _cell(self._table, r, 0, str(i + 1), Qt.AlignCenter)
             _cell(self._table, r, 1, row.get("member_name", ""))
             _cell(self._table, r, 2, str(row.get("count", 0)), Qt.AlignCenter)
-        self._table.setSortingEnabled(True)
+        self._table.setSortingEnabled(False)
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
@@ -189,10 +189,12 @@ class TopMembersTable(QWidget):
             self._table.insertRow(r)
             medal = self.MEDALS[i] if i < len(self.MEDALS) else str(i + 1)
             color = medal_colors[i] if i < 3 else None
-            _cell(self._table, r, 0, medal, Qt.AlignCenter, color)
+            _cell(self._table, r, 0, medal, Qt.AlignCenter, color)  
             _cell(self._table, r, 1, row.get("member_name", ""), color=color)
-            _cell(self._table, r, 2, str(row.get("days_count", 0)), Qt.AlignCenter, color)
+            _cell(self._table, r, 2, str(row.get("days_count", 0)), Qt.AlignCenter, color)\
+            
         self._table.setSortingEnabled(True)
+        self._table.sortItems(0, Qt.AscendingOrder)
 
 
 # ══════════════════════════════════════════════════════════════════════════ #

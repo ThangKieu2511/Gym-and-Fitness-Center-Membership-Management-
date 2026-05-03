@@ -35,17 +35,18 @@ class DashboardController:
             detail          : list[dict]  — mỗi member + số lần check-in
                               keys: member_id, member_name, count
         """
-        today = date.today().isoformat()
-        prefix = f"{today}%"
+        today = date.today()
+        start = f"{today} 00:00:00"
+        end   = f"{today} 23:59:59"
 
         total_row = self._db._execute(
             """
             SELECT COUNT(*) AS cnt
             FROM   checkins
-            WHERE  checkin_time LIKE ?
+            WHERE  checkin_time BETWEEN ? AND ? 
               AND  status = 'valid'
             """,
-            (prefix,),
+            (start,end),
             fetch="one",
         )
 
@@ -53,10 +54,10 @@ class DashboardController:
             """
             SELECT COUNT(DISTINCT member_id) AS cnt
             FROM   checkins
-            WHERE  checkin_time LIKE ?
+            WHERE  checkin_time BETWEEN ? AND ? 
               AND  status = 'valid'
             """,
-            (prefix,),
+            (start,end),
             fetch="one",
         )
 
@@ -67,12 +68,12 @@ class DashboardController:
                    COUNT(*) AS count
             FROM   checkins c
             JOIN   members  m ON m.id = c.member_id
-            WHERE  c.checkin_time LIKE ?
+            WHERE  c.checkin_time BETWEEN ? AND ? 
               AND  c.status = 'valid'
             GROUP BY c.member_id
             ORDER BY count DESC, m.name
             """,
-            (prefix,),
+            (start,end),
             fetch="all",
         )
 
@@ -96,16 +97,21 @@ class DashboardController:
             detail          : list[dict] — member_id, member_name, count
         """
         today = date.today()
-        prefix = f"{today.year}-{today.month:02d}%"
+        start = f"{today.year}-{today.month:02d}-01 00:00:00"
+
+        if today.month == 12:
+            next_month = f"{today.year + 1}-01-01 00:00:00"
+        else:
+            next_month = f"{today.year}-{today.month + 1:02d}-01 00:00:00"
 
         total_row = self._db._execute(
             """
             SELECT COUNT(*) AS cnt
             FROM   checkins
-            WHERE  checkin_time LIKE ?
+            WHERE  checkin_time >= ? AND checkin_time < ?
               AND  status = 'valid'
             """,
-            (prefix,),
+            (start,next_month),
             fetch="one",
         )
 
@@ -113,26 +119,27 @@ class DashboardController:
             """
             SELECT COUNT(DISTINCT member_id) AS cnt
             FROM   checkins
-            WHERE  checkin_time LIKE ?
+            WHERE  checkin_time BETWEEN ? AND ? 
               AND  status = 'valid'
             """,
-            (prefix,),
+            (start,next_month),
             fetch="one",
         )
 
         detail = self._db._execute(
             """
             SELECT c.member_id,
-                   m.name   AS member_name,
-                   COUNT(*) AS count
+                m.name   AS member_name,
+                COUNT(DISTINCT date(c.checkin_time)) AS days_count,
+                COUNT(*) AS total_checkins
             FROM   checkins c
             JOIN   members  m ON m.id = c.member_id
-            WHERE  c.checkin_time LIKE ?
+            WHERE  c.checkin_time >= ? AND c.checkin_time < ?
               AND  c.status = 'valid'
             GROUP BY c.member_id
-            ORDER BY count DESC, m.name
+            ORDER BY days_count DESC, total_checkins DESC
             """,
-            (prefix,),
+            (start,next_month),
             fetch="all",
         )
 
@@ -173,22 +180,28 @@ class DashboardController:
         list[dict]: member_id, member_name, days_count
         """
         today = date.today()
-        prefix = f"{today.year}-{today.month:02d}%"
+        start = f"{today.year}-{today.month:02d}-01 00:00:00"
+
+        if today.month == 12:
+            next_month = f"{today.year + 1}-01-01 00:00:00"
+        else:
+            next_month = f"{today.year}-{today.month + 1:02d}-01 00:00:00"
 
         rows = self._db._execute(
             """
             SELECT c.member_id,
                    m.name AS member_name,
-                   COUNT(DISTINCT date(c.checkin_time)) AS days_count
+                   COUNT(DISTINCT date(c.checkin_time)) AS days_count,
+                   COUNT(*) AS total_checkins
             FROM   checkins c
             JOIN   members  m ON m.id = c.member_id
-            WHERE  c.checkin_time LIKE ?
+            WHERE  c.checkin_time >= ? AND c.checkin_time < ?
               AND  c.status = 'valid'
             GROUP BY c.member_id
-            ORDER BY days_count DESC, m.name
+            ORDER BY days_count DESC, total_checkins DESC
             LIMIT  ?
             """,
-            (prefix, limit),
+            (start,next_month,limit),
             fetch="all",
         )
         return rows or []
