@@ -153,7 +153,7 @@ class TodayDetailTable(QWidget):
             _cell(self._table, r, 1, row.get("member_name", ""))
             _cell(self._table, r, 2, str(row.get("count", 0)), Qt.AlignCenter)
         self._table.setSortingEnabled(False)
-
+        self._table.sortItems(0, Qt.AscendingOrder)
 
 # ══════════════════════════════════════════════════════════════════════════ #
 #  TopMembersTable                                                            #
@@ -179,6 +179,9 @@ class TopMembersTable(QWidget):
     def load(self, rows: list[dict]) -> None:
         self._table.setSortingEnabled(False)
         self._table.setRowCount(0)
+
+        rows = sorted(rows, key=lambda x: x.get("days_count", 0), reverse=True)
+
         medal_colors = [
             QColor("#f59e0b"),   # gold
             QColor("#94a3b8"),   # silver
@@ -193,8 +196,7 @@ class TopMembersTable(QWidget):
             _cell(self._table, r, 1, row.get("member_name", ""), color=color)
             _cell(self._table, r, 2, str(row.get("days_count", 0)), Qt.AlignCenter, color)\
             
-        self._table.setSortingEnabled(True)
-        self._table.sortItems(0, Qt.AscendingOrder)
+        self._table.setSortingEnabled(False)
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
