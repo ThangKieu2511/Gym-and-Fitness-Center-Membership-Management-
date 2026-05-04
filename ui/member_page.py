@@ -1,20 +1,20 @@
 """
-ui/member_page.py  —  Phase 4
+ui/member_page.py  —  Phase 10
 
-Trang quản lý hội viên — bảng + CRUD dialogs + tìm kiếm realtime.
-
-Thay đổi so với Phase 3:
-  • Thanh tìm kiếm với debounce 300ms (QTimer)
-  • Nút Làm Mới xóa ô tìm kiếm + reload toàn bộ
-  • Empty-state widget khi không có kết quả
-  • Truyền join_date khi gọi update_member (giữ nguyên ngày tham gia)
-  • Thông báo lỗi chi tiết cho trùng phone/email (IntegrityError)
-  • Status bar phân biệt đang tìm kiếm hay hiển thị tất cả
+Thay đổi so với Phase 4:
+  • Thêm nút "📷 Tạo QR" vào toolbar
+  • Slot _on_generate_qr: gọi controller, thông báo thành công/lỗi, mở file
+  • btn_qr bật/tắt theo lựa chọn hàng (giống btn_edit / btn_delete)
 """
 
 from __future__ import annotations
 
+import os
+import sys
+
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -228,30 +228,34 @@ class MemberPage(QWidget):
         hdr.addStretch()
         return hdr
 
-    # ── Toolbar (các nút CRUD) ────────────────────────────────────────── #
+    # ── Toolbar (các nút CRUD + QR) ───────────────────────────────────── #
 
     def _build_toolbar(self) -> QHBoxLayout:
         bar = QHBoxLayout()
         bar.setSpacing(8)
 
-        self.btn_add    = self._make_btn("➕  Thêm Hội Viên", "btnPrimary")
-        self.btn_edit   = self._make_btn("✏️  Chỉnh Sửa",     "btnSecondary")
-        self.btn_delete = self._make_btn("🗑️  Xóa",           "btnDanger")
-        self.btn_refresh = self._make_btn("🔄  Làm Mới",      "btnNeutral")
+        self.btn_add     = self._make_btn("➕  Thêm Hội Viên", "btnPrimary")
+        self.btn_edit    = self._make_btn("✏️  Chỉnh Sửa",     "btnSecondary")
+        self.btn_delete  = self._make_btn("🗑️  Xóa",           "btnDanger")
+        self.btn_qr      = self._make_btn("📷  Tạo QR",        "btnSecondary")   # ← MỚI
+        self.btn_refresh = self._make_btn("🔄  Làm Mới",       "btnNeutral")
 
         self.btn_edit.setEnabled(False)
         self.btn_delete.setEnabled(False)
+        self.btn_qr.setEnabled(False)     # ← MỚI: tắt khi chưa chọn hàng
 
         bar.addWidget(self.btn_add)
         bar.addWidget(self.btn_edit)
         bar.addWidget(self.btn_delete)
+        bar.addWidget(self.btn_qr)        # ← MỚI
         bar.addStretch()
         bar.addWidget(self.btn_refresh)
 
         self.btn_add.clicked.connect(self.open_add_dialog)
         self.btn_edit.clicked.connect(self.open_edit_dialog)
         self.btn_delete.clicked.connect(self.confirm_delete)
-        self.btn_refresh.clicked.connect(self._on_refresh)    # ← xóa search rồi reload
+        self.btn_qr.clicked.connect(self._on_generate_qr)          # ← MỚI
+        self.btn_refresh.clicked.connect(self._on_refresh)
 
         return bar
 
@@ -261,21 +265,18 @@ class MemberPage(QWidget):
         row = QHBoxLayout()
         row.setSpacing(8)
 
-        # Icon tìm kiếm
         search_icon = QLabel("🔍")
         search_icon.setFixedWidth(24)
         search_icon.setAlignment(Qt.AlignCenter)
 
-        # Ô nhập tìm kiếm
         self.search_input = QLineEdit()
         self.search_input.setObjectName("searchInput")
         self.search_input.setPlaceholderText(
             "Tìm theo tên, số điện thoại hoặc email..."
         )
         self.search_input.setMinimumHeight(36)
-        self.search_input.setClearButtonEnabled(True)   # nút ✕ tích hợp sẵn
+        self.search_input.setClearButtonEnabled(True)
 
-        # Khi người dùng gõ → khởi động lại debounce timer
         self.search_input.textChanged.connect(self._on_search_text_changed)
 
         row.addWidget(search_icon)
@@ -290,7 +291,7 @@ class MemberPage(QWidget):
 
         for col in range(len(COLUMNS)):
             tbl.horizontalHeaderItem(col).setTextAlignment(Qt.AlignCenter)
-        # Hành vi chọn: toàn hàng, đơn, không sửa trực tiếp
+
         tbl.setSelectionBehavior(QTableWidget.SelectRows)
         tbl.setSelectionMode(QTableWidget.SingleSelection)
         tbl.setEditTriggers(QTableWidget.NoEditTriggers)
@@ -300,10 +301,8 @@ class MemberPage(QWidget):
         tbl.setSortingEnabled(True)
         tbl.setShowGrid(False)
 
-        
         tbl.horizontalHeaderItem(COL_PHONE).setTextAlignment(Qt.AlignCenter)
 
-        # Giãn cột
         hdr = tbl.horizontalHeader()
         hdr.setDefaultAlignment(Qt.AlignCenter)
         hdr.setSectionResizeMode(COL_ID,     QHeaderView.ResizeToContents)
@@ -360,9 +359,8 @@ class MemberPage(QWidget):
         self.table.setSortingEnabled(True)
 
         if members:
-            self._table_stack.setCurrentIndex(0)    # hiện bảng
+            self._table_stack.setCurrentIndex(0)
         else:
-            # Thông báo phù hợp: đang tìm hay thực sự rỗng?
             query = self.search_input.text().strip()
             if query:
                 self._empty_lbl.setText(
@@ -370,7 +368,7 @@ class MemberPage(QWidget):
                 )
             else:
                 self._empty_lbl.setText("📋  Chưa có hội viên nào.\nHãy bấm ➕ Thêm Hội Viên để bắt đầu.")
-            self._table_stack.setCurrentIndex(1)    # hiện empty-state
+            self._table_stack.setCurrentIndex(1)
 
         self._sync_buttons()
 
@@ -380,15 +378,13 @@ class MemberPage(QWidget):
         col: int,
         text: str,
         align: Qt.AlignmentFlag = Qt.AlignLeft | Qt.AlignVCenter,
-        real_id: int | None = None,   # thêm dòng này
+        real_id: int | None = None,
     ) -> None:
         item = QTableWidgetItem(text or "")
         item.setTextAlignment(align | Qt.AlignVCenter)
-        if real_id is not None : 
-            item.setData(Qt.UserRole, real_id) 
+        if real_id is not None:
+            item.setData(Qt.UserRole, real_id)
         self.table.setItem(row, col, item)
-
-    # ── load_data: tải toàn bộ (dùng khi refresh / sau CRUD) ─────────── #
 
     @Slot()
     def load_data(self) -> None:
@@ -402,8 +398,6 @@ class MemberPage(QWidget):
         count = len(members)
         self._status_lbl.setText(f"Tổng cộng {count} hội viên")
         self._populate_table(members)
-
-    # ── _do_search: gọi sau khi debounce timer hết giờ ───────────────── #
 
     @Slot()
     def _do_search(self) -> None:
@@ -430,13 +424,10 @@ class MemberPage(QWidget):
 
     @Slot(str)
     def _on_search_text_changed(self, _text: str) -> None:
-        """Mỗi lần text thay đổi → reset timer debounce."""
-        self._search_timer.start()      # Reset lại time sau khi gõ
+        self._search_timer.start()
 
     @Slot()
     def _on_refresh(self) -> None:
-        """Làm mới: xóa ô tìm kiếm + tải lại toàn bộ."""
-        # blockSignals tránh timer bắn khi clear
         self.search_input.blockSignals(True)
         self.search_input.clear()
         self.search_input.blockSignals(False)
@@ -463,7 +454,7 @@ class MemberPage(QWidget):
             return
 
         self._status_lbl.setText("✅  Thêm hội viên thành công!")
-        self._on_refresh()              # xóa search, reload toàn bộ
+        self._on_refresh()
         self.data_changed.emit()
 
     @Slot()
@@ -488,14 +479,14 @@ class MemberPage(QWidget):
                 data["phone"],
                 data["email"],
                 data["gender"],
-                member["join_date"],    # ← giữ nguyên ngày tham gia gốc
+                member["join_date"],
             )
         except (ValueError, RuntimeError) as exc:
             QMessageBox.warning(self, "⚠️  Chỉnh Sửa Thất Bại", str(exc))
             return
 
         self._status_lbl.setText("✅  Cập nhật hội viên thành công!")
-        self._do_search()               # giữ nguyên kết quả tìm kiếm hiện tại
+        self._do_search()
         self.data_changed.emit()
 
     @Slot()
@@ -527,8 +518,60 @@ class MemberPage(QWidget):
             return
 
         self._status_lbl.setText("🗑️  Đã xóa hội viên.")
-        self._do_search()               # giữ nguyên kết quả tìm kiếm hiện tại
+        self._do_search()
         self.data_changed.emit()
+
+    # ══════════════════════════════════════════════════════════════════ #
+    #  Tạo QR  (Phase 10)                                               #
+    # ══════════════════════════════════════════════════════════════════ #
+
+    @Slot()
+    def _on_generate_qr(self) -> None:
+        """
+        Slot xử lý nút "📷 Tạo QR":
+          1. Lấy member đang chọn
+          2. Gọi controller.generate_member_qr(member_id)
+          3. Thông báo thành công + hỏi có muốn mở file không
+          4. Hiển thị lỗi nếu thất bại
+        """
+        member = self._selected_member()
+        if member is None:
+            QMessageBox.information(
+                self, "Chưa Chọn",
+                "Vui lòng chọn một hội viên trong bảng để tạo QR."
+            )
+            return
+
+        member_id   = member["id"]
+        member_name = member["name"]
+
+        try:
+            qr_path = self._controller.generate_member_qr(member_id)
+        except (ValueError, RuntimeError) as exc:
+            QMessageBox.critical(
+                self,
+                "❌  Tạo QR Thất Bại",
+                str(exc),
+            )
+            return
+
+        self._status_lbl.setText(
+            f"✅  Đã tạo QR cho hội viên {member_name} → {qr_path}"
+        )
+
+        # Hỏi người dùng có muốn mở file ảnh ngay không
+        reply = QMessageBox.question(
+            self,
+            "✅  Tạo QR Thành Công",
+            f"Đã tạo QR cho hội viên <b>{member_name}</b>.<br><br>"
+            f"📁 File: <code>{qr_path}</code><br><br>"
+            "Bạn có muốn mở file QR ngay bây giờ không?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+
+        if reply == QMessageBox.Yes:
+            QDesktopServices.openUrl(QUrl.fromLocalFile(qr_path))
 
     # ══════════════════════════════════════════════════════════════════ #
     #  Helpers                                                           #
@@ -557,3 +600,4 @@ class MemberPage(QWidget):
         has_sel = bool(self.table.selectionModel().selectedRows())
         self.btn_edit.setEnabled(has_sel)
         self.btn_delete.setEnabled(has_sel)
+        self.btn_qr.setEnabled(has_sel)       # ← MỚI: đồng bộ nút QR

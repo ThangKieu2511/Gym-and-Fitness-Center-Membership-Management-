@@ -1,20 +1,20 @@
 """
-controllers/member_controller.py  —  Phase 4
+controllers/member_controller.py  —  Phase 10
 
-Tầng trung gian giữa UI và Database.
-Không có SQL thô — chỉ gọi qua self.db.
-
-Thay đổi so với Phase 3:
-  • Thêm search_members(query)         — tìm kiếm realtime
-  • update_member nhận thêm join_date  — giữ nguyên ngày tham gia khi sửa
-  • Bắt sqlite3.IntegrityError         — dịch sang thông báo tiếng Việt thân thiện
+Thay đổi so với Phase 4:
+  • Thêm generate_member_qr(member_id) — tạo QR, lưu PNG, cập nhật DB
 """
 
 from __future__ import annotations
 
+import os
 import sqlite3
 
 from database import Database
+from utils.qr_generator import generate_qr
+
+# Thư mục chứa file QR PNG
+QR_DIR = "qr_codes"
 
 
 class MemberController:
@@ -204,3 +204,72 @@ class MemberController:
             raise RuntimeError(
                 f"Không thể xóa hội viên #{member_id}: {exc}"
             ) from exc
+
+    # ------------------------------------------------------------------ #
+    #  Tạo QR  (Phase 10)                                                  #
+    # ------------------------------------------------------------------ #
+
+    def generate_member_qr(self, member_id: int) -> str:
+        """
+        Tạo QR Code cho hội viên, lưu PNG vào ``qr_codes/``, cập nhật DB.
+
+        Logic:
+          1. Tạo chuỗi ``qr_data = "member:<id>"``
+          2. Đảm bảo thư mục ``qr_codes/`` tồn tại (tạo nếu chưa có)
+          3. Gọi ``generate_qr(qr_data, path)`` để xuất file PNG
+          4. Ghi ``qr_data`` vào cột ``members.qr_code`` trong DB
+          5. Trả về đường dẫn file PNG
+
+        Nếu QR đã tồn tại → overwrite (không báo lỗi).
+
+        Parameters
+        ----------
+        member_id : ID hội viên cần tạo QR.
+
+        Returns
+        -------
+        str  Đường dẫn tuyệt đối tới file QR PNG vừa tạo.
+
+        Raises
+        ------
+        ValueError   : Nếu không tìm thấy hội viên.
+        RuntimeError : Lỗi ghi file hoặc DB.
+        """
+        # ── 1. Kiểm tra hội viên tồn tại ──────────────────────────────── #
+        try:
+            existing = self.db.get_member(member_id)
+        except Exception as exc:
+            raise RuntimeError(f"Không thể truy vấn hội viên #{member_id}: {exc}") from exc
+
+        if existing is None:
+            raise ValueError(f"Không tìm thấy hội viên có ID = {member_id}.")
+
+        # ── 2. Chuỗi dữ liệu QR theo format Phase 9 ───────────────────── #
+        qr_data = f"member:{member_id}"
+
+        # ── 3. Đảm bảo thư mục tồn tại ────────────────────────────────── #
+        os.makedirs(QR_DIR, exist_ok=True)
+        file_path = os.path.join(QR_DIR, f"member_{member_id}.png")
+
+        # ── 4. Tạo file PNG ────────────────────────────────────────────── #
+        try:
+            generate_qr(qr_data, file_path)
+        except Exception as exc:
+            raise RuntimeError(f"Không thể tạo file QR: {exc}") from exc
+
+        # ── 5. Cập nhật cột qr_code trong DB ──────────────────────────── #
+        try:
+            join_date = existing.get("join_date", "")
+            self.db.update_member(
+                member_id,
+                existing.get("name", ""),
+                existing.get("phone", ""),
+                existing.get("email", ""),
+                existing.get("gender", ""),
+                join_date,
+                qr_code=qr_data,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"Không thể lưu mã QR vào database: {exc}") from exc
+
+        return os.path.abspath(file_path)
