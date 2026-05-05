@@ -1,22 +1,31 @@
 """
-ui/dashboard_page.py  —  Phase 8
+ui/dashboard_page.py  —  Phase Chart (Dialog)
 
 Dashboard tổng quan cho gym management:
-  • StatCard       — card hiển thị 1 chỉ số
-  • TodayDetail    — bảng danh sách check-in hôm nay theo member
-  • TopMembersTable — bảng top 5 đi tập nhiều nhất tháng
-  • MemberHistory  — combobox + bảng lịch sử 1 hội viên
-  • DashboardPage  — trang tổng hợp
+  • StatCard           — card hiển thị 1 chỉ số
+  • TodayDetailTable   — bảng danh sách check-in hôm nay theo member
+  • TopMembersTable    — bảng top 5 đi tập nhiều nhất tháng
+  • MemberHistoryPanel — combobox + bảng lịch sử 1 hội viên
+  • ChartDialog        — dialog popup hiển thị Pie + Bar chart
+  • DashboardPage      — trang tổng hợp
 """
 
 from __future__ import annotations
 
+import matplotlib
+matplotlib.use("Qt5Agg")
+
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
+
 from datetime import date
 
 from PySide6.QtCore import Qt, QTimer, Slot
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -155,6 +164,7 @@ class TodayDetailTable(QWidget):
         self._table.setSortingEnabled(False)
         self._table.sortItems(0, Qt.AscendingOrder)
 
+
 # ══════════════════════════════════════════════════════════════════════════ #
 #  TopMembersTable                                                            #
 # ══════════════════════════════════════════════════════════════════════════ #
@@ -192,10 +202,10 @@ class TopMembersTable(QWidget):
             self._table.insertRow(r)
             medal = self.MEDALS[i] if i < len(self.MEDALS) else str(i + 1)
             color = medal_colors[i] if i < 3 else None
-            _cell(self._table, r, 0, medal, Qt.AlignCenter, color)  
+            _cell(self._table, r, 0, medal, Qt.AlignCenter, color)
             _cell(self._table, r, 1, row.get("member_name", ""), color=color)
-            _cell(self._table, r, 2, str(row.get("days_count", 0)), Qt.AlignCenter, color)\
-            
+            _cell(self._table, r, 2, str(row.get("days_count", 0)), Qt.AlignCenter, color)
+
         self._table.setSortingEnabled(False)
 
 
@@ -255,9 +265,9 @@ class MemberHistoryPanel(QWidget):
 
             status = row.get("status", "")
             if status == "valid":
-                label, color = "✅  Hợp Lệ",    QColor("#22c55e")
+                label, color = "✅  Hợp Lệ",      QColor("#22c55e")
             elif status == "expired":
-                label, color = "⚠️  Hết Hạn",   QColor("#f59e0b")
+                label, color = "⚠️  Hết Hạn",     QColor("#f59e0b")
             else:
                 label, color = "❌  Chưa Đăng Ký", QColor("#ef4444")
             _cell(self._table, r, 2, label, Qt.AlignCenter, color)
@@ -270,7 +280,6 @@ class MemberHistoryPanel(QWidget):
 
     @Slot()
     def _on_member_changed(self) -> None:
-        # Emit up to DashboardPage — handled via callback
         pass
 
     def selected_member_id(self) -> int | None:
@@ -278,6 +287,146 @@ class MemberHistoryPanel(QWidget):
         if idx < 0:
             return None
         return self._combo.itemData(idx)
+
+
+# ══════════════════════════════════════════════════════════════════════════ #
+#  ChartDialog  — popup riêng chứa Pie + Bar chart                           #
+# ══════════════════════════════════════════════════════════════════════════ #
+
+class ChartDialog(QDialog):
+    """
+    Dialog popup hiển thị:
+      - Pie chart : tỷ lệ valid / expired check-in tháng này
+      - Bar chart : top 5 hội viên theo số ngày đi tập
+    Mở bằng nút "📈 Xem Biểu Đồ" trên header Dashboard.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("📈  Biểu Đồ Thống Kê Tháng Này")
+        self.setMinimumSize(900, 480)
+        self.resize(1000, 520)
+        self.setModal(True)
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        root = QVBoxLayout(self)
+        root.setContentsMargins(20, 16, 20, 16)
+        root.setSpacing(12)
+
+        # Tiêu đề
+        month_str = date.today().strftime("%m/%Y")
+        title_lbl = QLabel(f"Thống kê tháng {month_str}")
+        title_lbl.setObjectName("sectionTitle")
+        root.addWidget(title_lbl)
+
+        # Hai chart cạnh nhau
+        charts_row = QHBoxLayout()
+        charts_row.setSpacing(24)
+
+        # ── Pie chart ──
+        pie_col = QVBoxLayout()
+        pie_col.setSpacing(6)
+        pie_lbl = QLabel("🥧  Tỷ Lệ Check-in")
+        pie_lbl.setObjectName("sectionTitle")
+        pie_col.addWidget(pie_lbl)
+
+        self._pie_figure = Figure(figsize=(4.5, 3.5), tight_layout=True)
+        self._pie_canvas = FigureCanvas(self._pie_figure)
+        self._pie_canvas.setMinimumSize(380, 300)
+        pie_col.addWidget(self._pie_canvas)
+        charts_row.addLayout(pie_col, stretch=1)
+
+        # Divider dọc
+        vline = QFrame()
+        vline.setFrameShape(QFrame.VLine)
+        vline.setObjectName("sidebarDivider")
+        charts_row.addWidget(vline)
+
+        # ── Bar chart ──
+        bar_col = QVBoxLayout()
+        bar_col.setSpacing(6)
+        bar_lbl = QLabel("📊  Top 5 Hội Viên — Số Ngày Đi Tập")
+        bar_lbl.setObjectName("sectionTitle")
+        bar_col.addWidget(bar_lbl)
+
+        self._bar_figure = Figure(figsize=(5, 3.5), tight_layout=True)
+        self._bar_canvas = FigureCanvas(self._bar_figure)
+        self._bar_canvas.setMinimumSize(420, 300)
+        bar_col.addWidget(self._bar_canvas)
+        charts_row.addLayout(bar_col, stretch=1)
+
+        root.addLayout(charts_row)
+
+        # Nút đóng
+        btn_box = QDialogButtonBox(QDialogButtonBox.Close)
+        btn_box.rejected.connect(self.reject)
+        root.addWidget(btn_box, alignment=Qt.AlignRight)
+
+    # ── Public API ────────────────────────────────────────────────────── #
+
+    def load_data(self, checkin_status: dict, top_members: list[dict]) -> None:
+        """Nhận dữ liệu từ DashboardPage và vẽ cả hai chart."""
+        self._draw_pie(checkin_status)
+        self._draw_bar(top_members)
+
+    # ── Private drawing ───────────────────────────────────────────────── #
+
+    def _draw_pie(self, stats: dict) -> None:
+        valid   = stats.get("valid", 0)
+        expired = stats.get("expired", 0)
+
+        self._pie_figure.clear()
+        ax = self._pie_figure.add_subplot(111)
+
+        total = valid + expired
+        if total == 0:
+            ax.text(0.5, 0.5, "Không có dữ liệu",
+                    ha="center", va="center", transform=ax.transAxes, fontsize=11)
+            ax.axis("off")
+        else:
+            sizes  = [valid, expired]
+            labels = [f"Hợp lệ\n{valid}", f"Hết hạn\n{expired}"]
+            wedges, texts, autotexts = ax.pie(
+                sizes,
+                labels=labels,
+                autopct="%1.1f%%",
+                startangle=90,
+            )
+            for at in autotexts:
+                at.set_fontsize(10)
+            ax.set_title("Check-in theo trạng thái", fontsize=11, pad=8)
+
+        self._pie_canvas.draw()
+
+    def _draw_bar(self, rows: list[dict]) -> None:
+        self._bar_figure.clear()
+        ax = self._bar_figure.add_subplot(111)
+
+        if not rows:
+            ax.text(0.5, 0.5, "Không có dữ liệu",
+                    ha="center", va="center", transform=ax.transAxes, fontsize=11)
+            ax.axis("off")
+        else:
+            names = [r.get("member_name", "") for r in rows]
+            days  = [r.get("days_count", 0)   for r in rows]
+
+            bars = ax.bar(names, days)
+            ax.set_xlabel("Hội viên", fontsize=10)
+            ax.set_ylabel("Số ngày",  fontsize=10)
+            ax.set_title("Top 5 hội viên tháng này", fontsize=11, pad=8)
+            ax.tick_params(axis="x", labelsize=9)
+            ax.tick_params(axis="y", labelsize=9)
+
+            for bar, val in zip(bars, days):
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2,
+                    bar.get_height() + 0.1,
+                    str(val),
+                    ha="center", va="bottom", fontsize=10,
+                )
+
+        self._bar_canvas.draw()
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
@@ -289,6 +438,11 @@ class DashboardPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._ctrl = DashboardController()
+
+        # Cache dữ liệu chart — cập nhật mỗi lần refresh, dùng khi mở dialog
+        self._cached_checkin_status: dict       = {"valid": 0, "expired": 0}
+        self._cached_top_members:    list[dict] = []
+
         self._setup_ui()
         self.refresh_data()
 
@@ -369,6 +523,15 @@ class DashboardPage(QWidget):
         hdr.addLayout(text_col)
         hdr.addStretch()
 
+        # ── Nút xem biểu đồ ──
+        btn_chart = QPushButton("📈  Xem Biểu Đồ")
+        btn_chart.setObjectName("btnNeutral")
+        btn_chart.setMinimumHeight(34)
+        btn_chart.setCursor(Qt.PointingHandCursor)
+        btn_chart.clicked.connect(self._open_chart_dialog)
+        hdr.addWidget(btn_chart)
+
+        # ── Nút làm mới ──
         btn_refresh = QPushButton("🔄  Làm Mới")
         btn_refresh.setObjectName("btnNeutral")
         btn_refresh.setMinimumHeight(34)
@@ -404,11 +567,16 @@ class DashboardPage(QWidget):
     def refresh_data(self) -> None:
         """Load / reload tất cả dữ liệu dashboard."""
         try:
-            today_stats  = self._ctrl.get_today_stats()
-            month_stats  = self._ctrl.get_month_stats()
-            active_count = self._ctrl.get_active_members()
-            top_members  = self._ctrl.get_top_members(limit=5)
-            all_members  = self._ctrl.get_all_members()
+            today_stats    = self._ctrl.get_today_stats()
+            month_stats    = self._ctrl.get_month_stats()
+            active_count   = self._ctrl.get_active_members()
+            top_members    = self._ctrl.get_top_members(limit=5)
+            all_members    = self._ctrl.get_all_members()
+            checkin_status = self._ctrl.get_checkin_status_stats()
+
+            # Cache cho chart dialog
+            self._cached_checkin_status = checkin_status
+            self._cached_top_members    = top_members
 
             # Stat cards
             self._card_today_total.set_value(str(today_stats["total_checkins"]))
@@ -425,17 +593,14 @@ class DashboardPage(QWidget):
             current_id = self._history_panel.selected_member_id()
             self._history_panel.populate_members(all_members)
 
-            # Khôi phục selection
             if current_id is not None:
                 combo = self._history_panel._combo
                 for i in range(combo.count()):
                     if combo.itemData(i) == current_id:
                         combo.setCurrentIndex(i)
                         break
-
                 self._load_member_history()
             elif all_members:
-                # Load history cho member đầu tiên mặc định
                 self._history_panel._combo.setCurrentIndex(0)
                 self._load_member_history()
 
@@ -463,6 +628,13 @@ class DashboardPage(QWidget):
             self._status_lbl.setText(f"❌  Lỗi tải lịch sử: {exc}")
 
     # ── Slots ────────────────────────────────────────────────────────── #
+
+    @Slot()
+    def _open_chart_dialog(self) -> None:
+        """Mở dialog popup hiển thị biểu đồ với dữ liệu đã cache."""
+        dlg = ChartDialog(self)
+        dlg.load_data(self._cached_checkin_status, self._cached_top_members)
+        dlg.exec()
 
     @Slot()
     def _on_history_member_changed(self) -> None:

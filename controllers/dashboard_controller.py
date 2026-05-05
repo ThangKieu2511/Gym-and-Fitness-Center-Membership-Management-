@@ -1,12 +1,13 @@
 """
-controllers/dashboard_controller.py  —  Phase 8
+controllers/dashboard_controller.py  —  Phase Chart
 
 Cung cấp thống kê dashboard cho gym management:
-  • get_today_stats()     → tổng check-in + số người hôm nay
-  • get_month_stats()     → tổng check-in + số người tháng này
-  • get_active_members()  → số hội viên đang có gói active
-  • get_top_members()     → top N hội viên đi tập nhiều nhất tháng (tính theo ngày)
-  • get_member_history()  → lịch sử check-in của 1 hội viên
+  • get_today_stats()           → tổng check-in + số người hôm nay
+  • get_month_stats()           → tổng check-in + số người tháng này
+  • get_active_members()        → số hội viên đang có gói active
+  • get_top_members()           → top N hội viên đi tập nhiều nhất tháng (tính theo ngày)
+  • get_member_history()        → lịch sử check-in của 1 hội viên
+  • get_checkin_status_stats()  → thống kê valid/expired tháng này (cho Pie Chart)
 """
 
 from __future__ import annotations
@@ -43,10 +44,10 @@ class DashboardController:
             """
             SELECT COUNT(*) AS cnt
             FROM   checkins
-            WHERE  checkin_time BETWEEN ? AND ? 
+            WHERE  checkin_time BETWEEN ? AND ?
               AND  status = 'valid'
             """,
-            (start,end),
+            (start, end),
             fetch="one",
         )
 
@@ -54,10 +55,10 @@ class DashboardController:
             """
             SELECT COUNT(DISTINCT member_id) AS cnt
             FROM   checkins
-            WHERE  checkin_time BETWEEN ? AND ? 
+            WHERE  checkin_time BETWEEN ? AND ?
               AND  status = 'valid'
             """,
-            (start,end),
+            (start, end),
             fetch="one",
         )
 
@@ -68,12 +69,12 @@ class DashboardController:
                    COUNT(*) AS count
             FROM   checkins c
             JOIN   members  m ON m.id = c.member_id
-            WHERE  c.checkin_time BETWEEN ? AND ? 
+            WHERE  c.checkin_time BETWEEN ? AND ?
               AND  c.status = 'valid'
             GROUP BY c.member_id
             ORDER BY count DESC, m.name
             """,
-            (start,end),
+            (start, end),
             fetch="all",
         )
 
@@ -111,7 +112,7 @@ class DashboardController:
             WHERE  checkin_time >= ? AND checkin_time < ?
               AND  status = 'valid'
             """,
-            (start,next_month),
+            (start, next_month),
             fetch="one",
         )
 
@@ -119,10 +120,10 @@ class DashboardController:
             """
             SELECT COUNT(DISTINCT member_id) AS cnt
             FROM   checkins
-            WHERE  checkin_time BETWEEN ? AND ? 
+            WHERE  checkin_time BETWEEN ? AND ?
               AND  status = 'valid'
             """,
-            (start,next_month),
+            (start, next_month),
             fetch="one",
         )
 
@@ -139,7 +140,7 @@ class DashboardController:
             GROUP BY c.member_id
             ORDER BY days_count DESC, total_checkins DESC
             """,
-            (start,next_month),
+            (start, next_month),
             fetch="all",
         )
 
@@ -201,7 +202,7 @@ class DashboardController:
             ORDER BY days_count DESC, total_checkins DESC
             LIMIT  ?
             """,
-            (start,next_month,limit),
+            (start, next_month, limit),
             fetch="all",
         )
         return rows or []
@@ -242,3 +243,42 @@ class DashboardController:
             fetch="all",
         )
         return rows or []
+
+    # ── Thống kê trạng thái check-in (cho Pie Chart) ───────────────────── #
+
+    def get_checkin_status_stats(self) -> dict:
+        """
+        Thống kê số lượt check-in theo status trong tháng hiện tại.
+
+        Returns
+        -------
+        dict:
+            valid   : int  — số lượt check-in hợp lệ
+            expired : int  — số lượt check-in hết hạn
+        """
+        today = date.today()
+        start = f"{today.year}-{today.month:02d}-01 00:00:00"
+
+        if today.month == 12:
+            next_month = f"{today.year + 1}-01-01 00:00:00"
+        else:
+            next_month = f"{today.year}-{today.month + 1:02d}-01 00:00:00"
+
+        rows = self._db._execute(
+            """
+            SELECT status, COUNT(*) AS cnt
+            FROM   checkins
+            WHERE  checkin_time >= ? AND checkin_time < ?
+            GROUP BY status
+            """,
+            (start, next_month),
+            fetch="all",
+        )
+
+        result = {"valid": 0, "expired": 0}
+        for row in (rows or []):
+            status = row.get("status", "")
+            if status in result:
+                result[status] = row["cnt"]
+
+        return result
