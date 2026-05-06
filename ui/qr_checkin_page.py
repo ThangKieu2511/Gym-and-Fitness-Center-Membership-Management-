@@ -226,11 +226,24 @@ class _QRCheckinPageImpl(QWidget):
         return btn_row
 
     def _build_main_area(self) -> QHBoxLayout:
-        """Khung camera bên trái + ảnh member bên phải."""
         area = QHBoxLayout()
         area.setSpacing(16)
-        area.addLayout(self._build_camera_view())
-        area.addLayout(self._build_member_photo_panel())
+        area.setAlignment(Qt.AlignTop)
+
+        # ===== CAMERA =====
+        cam_container = QWidget()
+        cam_container.setLayout(self._build_camera_view())
+        cam_container.setFixedSize(FRAME_W, FRAME_H)
+
+        # ===== MEMBER (CHỈ 1 CONTAINER DUY NHẤT) =====
+        member_container = QWidget()
+        member_container.setLayout(self._build_member_photo_panel())
+        member_container.setFixedSize(MEMBER_IMG_W, MEMBER_IMG_H)
+
+        # ===== ADD =====
+        area.addWidget(cam_container)
+        area.addWidget(member_container)
+
         return area
 
     def _build_camera_view(self) -> QVBoxLayout:
@@ -248,22 +261,19 @@ class _QRCheckinPageImpl(QWidget):
         self._cam_label.setObjectName("statusLabel")
 
         wrap = QVBoxLayout()
+        wrap.setContentsMargins(0,0,0,0) 
         wrap.addWidget(self._cam_label)
-        wrap.addStretch()
+        wrap.addStretch()   
         return wrap
 
     def _build_member_photo_panel(self) -> QVBoxLayout:
-        """Panel bên phải: ảnh member + tên."""
         panel = QVBoxLayout()
-        panel.setSpacing(8)
-        panel.setAlignment(Qt.AlignTop)
+        panel.setContentsMargins(0, 0, 0, 0)
+        panel.setAlignment(Qt.AlignCenter)
 
-        title = QLabel("👤  Hội Viên")
-        title.setObjectName("pageSubtitle")
-        title.setAlignment(Qt.AlignCenter)
-
-        # QLabel ảnh
+        # 1. Image Label đóng vai trò là khung chứa (Container)
         self._member_img_lbl = QLabel()
+        # Đặt kích thước bằng với khung camera (không trừ 80 nữa)
         self._member_img_lbl.setFixedSize(MEMBER_IMG_W, MEMBER_IMG_H)
         self._member_img_lbl.setAlignment(Qt.AlignCenter)
         self._member_img_lbl.setStyleSheet(
@@ -271,24 +281,48 @@ class _QRCheckinPageImpl(QWidget):
             "border: 2px solid #334155;"
             "border-radius: 8px;"
             "color: #64748b;"
-            "font-size: 13px;"
         )
-        self._member_img_lbl.setText("No Image")
+        self._member_img_lbl.setText("Chưa có ảnh")
 
-        # Tên member
+        # 2. Tạo Overlay Layout nằm đè lên trên Image Label
+        overlay_layout = QVBoxLayout(self._member_img_lbl)
+        overlay_layout.setAlignment(Qt.AlignCenter)
+        overlay_layout.setSpacing(8)
+
+        # Title ("Hội Viên")
+        title = QLabel("👤  Hội Viên")
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet(
+            "color: #ffffff; "
+            "font-weight: bold; "
+            "font-size: 14px; "
+            "background: rgba(0, 0, 0, 150); "  # Nền đen bán trong suốt
+            "padding: 6px 16px; "
+            "border-radius: 6px;"
+        )
+
+        # Name
         self._member_name_lbl = QLabel("")
         self._member_name_lbl.setAlignment(Qt.AlignCenter)
         self._member_name_lbl.setWordWrap(True)
         self._member_name_lbl.setStyleSheet(
-            "color: #e2e8f0; font-weight: 600; font-size: 14px;"
+            "color: #38bdf8; "
+            "font-weight: bold; "
+            "font-size: 20px; "
+            "background: rgba(0, 0, 0, 150); "  # Nền đen bán trong suốt
+            "padding: 8px 16px; "
+            "border-radius: 6px;"
         )
+        self._member_name_lbl.hide()  # Ẩn đi khi chưa có khách hàng check-in
 
-        panel.addWidget(title)
+        # Thêm các text vào overlay
+        overlay_layout.addWidget(title)
+        overlay_layout.addWidget(self._member_name_lbl)
+
+        # Thêm khung ảnh vào panel
         panel.addWidget(self._member_img_lbl)
-        panel.addWidget(self._member_name_lbl)
-        panel.addStretch()
-        return panel
 
+        return panel
     # ── Public API ───────────────────────────────────────────────────── #
 
     def show_result(self, result: dict) -> None:
@@ -350,7 +384,7 @@ class _QRCheckinPageImpl(QWidget):
         qimg = QImage(rgb.data, w, h, w * 3, QImage.Format_RGB888)
         pix  = QPixmap.fromImage(qimg).scaled(
             FRAME_W, FRAME_H,
-            Qt.KeepAspectRatio,
+            Qt.KeepAspectRatioByExpanding,
             Qt.SmoothTransformation,
         )
         self._cam_label.setPixmap(pix)
@@ -388,20 +422,31 @@ class _QRCheckinPageImpl(QWidget):
 
     def _show_member_photo(self, image_path: str, member_name: str) -> None:
         """Load và hiển thị ảnh member lên panel bên phải."""
-        self._member_name_lbl.setText(member_name)
+        # Xử lý hiển thị tên
+        if member_name:
+            self._member_name_lbl.setText(member_name)
+            self._member_name_lbl.show()
+        else:
+            self._member_name_lbl.hide()
 
+        # Xử lý hiển thị ảnh
         if image_path and os.path.isfile(image_path):
             pix = QPixmap(image_path).scaled(
                 MEMBER_IMG_W,
                 MEMBER_IMG_H,
-                Qt.KeepAspectRatio,
+                Qt.KeepAspectRatioByExpanding,
                 Qt.SmoothTransformation,
             )
+
+            # Cắt ảnh ở giữa (Center Crop) để vừa khít hoàn toàn
+            x = (pix.width() - MEMBER_IMG_W) // 2
+            y = (pix.height() - MEMBER_IMG_H) // 2
+            pix = pix.copy(x, y, MEMBER_IMG_W, MEMBER_IMG_H)
+            
             self._member_img_lbl.setPixmap(pix)
-            self._member_img_lbl.setText("")
         else:
             self._member_img_lbl.clear()
-            self._member_img_lbl.setText("No Image")
+            self._member_img_lbl.setText("Chưa có ảnh")
 
     def closeEvent(self, event):  # noqa: N802
         self._on_stop()
