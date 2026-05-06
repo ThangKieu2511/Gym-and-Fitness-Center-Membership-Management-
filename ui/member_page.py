@@ -1,16 +1,16 @@
 """
 ui/member_page.py  —  Phase 10
 
-Thay đổi so với Phase 4:
-  • Thêm nút "📷 Tạo QR" vào toolbar
-  • Slot _on_generate_qr: gọi controller, thông báo thành công/lỗi, mở file
-  • btn_qr bật/tắt theo lựa chọn hàng (giống btn_edit / btn_delete)
+Thay đổi so với Phase 10:
+  • Thêm nút "📸 Chụp Ảnh" vào toolbar — chụp 1 frame từ camera, lưu vào
+    images/members/{member_id}.jpg rồi cập nhật image_path trong DB.
+  • MemberDialog vẫn giữ nguyên — không thay đổi.
+  • _sync_buttons() đồng bộ thêm btn_photo.
 """
 
 from __future__ import annotations
 
 import os
-import sys
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
 from PySide6.QtGui import QDesktopServices
@@ -36,6 +36,7 @@ from PySide6.QtWidgets import (
 )
 
 from controllers.member_controller import MemberController
+from database import Database
 
 # ── Định nghĩa cột bảng ─────────────────────────────────────────────────── #
 COLUMNS   = ["ID", "Họ Tên", "Số Điện Thoại", "Email", "Giới Tính", "Ngày Tham Gia"]
@@ -46,8 +47,54 @@ COL_EMAIL  = 3
 COL_GENDER = 4
 COL_JOIN   = 5
 
-# Thời gian chờ debounce tìm kiếm (ms)
 SEARCH_DEBOUNCE_MS = 300
+
+# Thư mục lưu ảnh member
+MEMBER_IMAGE_DIR = os.path.join("images", "members")
+
+
+# ══════════════════════════════════════════════════════════════════════════ #
+#  Helper: chụp ảnh từ camera                                               #
+# ══════════════════════════════════════════════════════════════════════════ #
+
+def _capture_member_photo(member_id: int) -> str:
+    """
+    Mở camera, chụp 1 frame, lưu vào images/members/{member_id}.jpg.
+
+    Returns
+    -------
+    str — đường dẫn file ảnh đã lưu.
+
+    Raises
+    ------
+    RuntimeError — nếu không mở được camera hoặc không đọc được frame.
+    """
+    try:
+        import cv2
+    except ImportError as exc:
+        raise RuntimeError("opencv-python chưa được cài. Chạy: pip install opencv-python") from exc
+
+    os.makedirs(MEMBER_IMAGE_DIR, exist_ok=True)
+
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        raise RuntimeError("Không thể mở camera. Kiểm tra camera có được kết nối không.")
+
+    try:
+        # Đọc vài frame để camera ổn định ánh sáng
+        for _ in range(5):
+            cap.read()
+
+        ok, frame = cap.read()
+        if not ok or frame is None:
+            raise RuntimeError("Không đọc được frame từ camera.")
+
+        frame = cv2.flip(frame, 1)  # mirror
+        save_path = os.path.join(MEMBER_IMAGE_DIR, f"{member_id}.jpg")
+        cv2.imwrite(save_path, frame)
+        return save_path
+    finally:
+        cap.release()
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
@@ -66,12 +113,10 @@ class MemberDialog(QDialog):
         member: dict | None = None,
     ) -> None:
         super().__init__(parent)
-        self._member = member       # None → chế độ Thêm
+        self._member = member
         self._setup_ui()
         if member:
             self._populate(member)
-
-    # ── Xây dựng UI ──────────────────────────────────────────────────── #
 
     def _setup_ui(self) -> None:
         is_edit = self._member is not None
@@ -79,7 +124,6 @@ class MemberDialog(QDialog):
         self.setMinimumWidth(440)
         self.setModal(True)
 
-        # Các ô nhập liệu
         self.name_input  = QLineEdit()
         self.name_input.setPlaceholderText("Họ và tên đầy đủ")
 
@@ -92,7 +136,6 @@ class MemberDialog(QDialog):
         self.gender_combo = QComboBox()
         self.gender_combo.addItems(["", "Nam", "Nữ"])
 
-        # Form
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignRight)
         form.setSpacing(12)
@@ -101,14 +144,12 @@ class MemberDialog(QDialog):
         form.addRow("Email",       self.email_input)
         form.addRow("Giới Tính",   self.gender_combo)
 
-        # Nút
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.button(QDialogButtonBox.Ok).setText("Lưu")
         buttons.button(QDialogButtonBox.Cancel).setText("Hủy")
         buttons.accepted.connect(self._on_accept)
         buttons.rejected.connect(self.reject)
 
-        # Tiêu đề
         icon      = "✏️" if is_edit else "➕"
         title_txt = "Chỉnh Sửa Hội Viên" if is_edit else "Thêm Hội Viên Mới"
         title_lbl = QLabel(f"{icon}  {title_txt}")
@@ -134,16 +175,12 @@ class MemberDialog(QDialog):
         if idx >= 0:
             self.gender_combo.setCurrentIndex(idx)
 
-    # ── Slots ────────────────────────────────────────────────────────── #
-
     def _on_accept(self) -> None:
         if not self.name_input.text().strip():
             QMessageBox.warning(self, "Lỗi Nhập Liệu", "Họ tên không được để trống.")
             self.name_input.setFocus()
             return
         self.accept()
-
-    # ── API công khai ────────────────────────────────────────────────── #
 
     def get_data(self) -> dict:
         return {
@@ -164,13 +201,13 @@ class MemberPage(QWidget):
     Sử dụng MemberController cho mọi thao tác dữ liệu.
     """
 
-    data_changed = Signal()     # emit khi DB thay đổi để sidebar cập nhật
+    data_changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controller = MemberController()
+        self._db         = Database()
 
-        # Timer debounce tìm kiếm — chỉ gọi DB sau khi người dùng dừng gõ
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(SEARCH_DEBOUNCE_MS)
@@ -190,21 +227,17 @@ class MemberPage(QWidget):
         root.addLayout(self._build_toolbar())
         root.addLayout(self._build_search_bar())
 
-        # ── Khu vực bảng / trạng thái rỗng ──
         self._table_stack = QStackedWidget()
         self.table        = self._build_table()
         self._empty_lbl   = self._build_empty_label()
 
-        self._table_stack.addWidget(self.table)        # index 0 → có dữ liệu
-        self._table_stack.addWidget(self._empty_lbl)   # index 1 → rỗng
+        self._table_stack.addWidget(self.table)
+        self._table_stack.addWidget(self._empty_lbl)
         root.addWidget(self._table_stack, stretch=1)
 
-        # ── Thanh trạng thái ──
         self._status_lbl = QLabel("0 hội viên")
         self._status_lbl.setObjectName("statusLabel")
         root.addWidget(self._status_lbl)
-
-    # ── Header ───────────────────────────────────────────────────────── #
 
     def _build_header(self) -> QHBoxLayout:
         hdr = QHBoxLayout()
@@ -228,8 +261,6 @@ class MemberPage(QWidget):
         hdr.addStretch()
         return hdr
 
-    # ── Toolbar (các nút CRUD + QR) ───────────────────────────────────── #
-
     def _build_toolbar(self) -> QHBoxLayout:
         bar = QHBoxLayout()
         bar.setSpacing(8)
@@ -237,29 +268,31 @@ class MemberPage(QWidget):
         self.btn_add     = self._make_btn("➕  Thêm Hội Viên", "btnPrimary")
         self.btn_edit    = self._make_btn("✏️  Chỉnh Sửa",     "btnSecondary")
         self.btn_delete  = self._make_btn("🗑️  Xóa",           "btnDanger")
-        self.btn_qr      = self._make_btn("📷  Tạo QR",        "btnSecondary")   # ← MỚI
+        self.btn_qr      = self._make_btn("📷  Tạo QR",        "btnSecondary")
+        self.btn_photo   = self._make_btn("📸  Chụp Ảnh",      "btnSecondary")   # ← NEW
         self.btn_refresh = self._make_btn("🔄  Làm Mới",       "btnNeutral")
 
         self.btn_edit.setEnabled(False)
         self.btn_delete.setEnabled(False)
-        self.btn_qr.setEnabled(False)     # ← MỚI: tắt khi chưa chọn hàng
+        self.btn_qr.setEnabled(False)
+        self.btn_photo.setEnabled(False)   # ← NEW: tắt khi chưa chọn hàng
 
         bar.addWidget(self.btn_add)
         bar.addWidget(self.btn_edit)
         bar.addWidget(self.btn_delete)
-        bar.addWidget(self.btn_qr)        # ← MỚI
+        bar.addWidget(self.btn_qr)
+        bar.addWidget(self.btn_photo)      # ← NEW
         bar.addStretch()
         bar.addWidget(self.btn_refresh)
 
         self.btn_add.clicked.connect(self.open_add_dialog)
         self.btn_edit.clicked.connect(self.open_edit_dialog)
         self.btn_delete.clicked.connect(self.confirm_delete)
-        self.btn_qr.clicked.connect(self._on_generate_qr)          # ← MỚI
+        self.btn_qr.clicked.connect(self._on_generate_qr)
+        self.btn_photo.clicked.connect(self._on_capture_photo)    # ← NEW
         self.btn_refresh.clicked.connect(self._on_refresh)
 
         return bar
-
-    # ── Thanh tìm kiếm ───────────────────────────────────────────────── #
 
     def _build_search_bar(self) -> QHBoxLayout:
         row = QHBoxLayout()
@@ -276,14 +309,11 @@ class MemberPage(QWidget):
         )
         self.search_input.setMinimumHeight(36)
         self.search_input.setClearButtonEnabled(True)
-
         self.search_input.textChanged.connect(self._on_search_text_changed)
 
         row.addWidget(search_icon)
         row.addWidget(self.search_input, stretch=1)
         return row
-
-    # ── Bảng dữ liệu ─────────────────────────────────────────────────── #
 
     def _build_table(self) -> QTableWidget:
         tbl = QTableWidget(0, len(COLUMNS))
@@ -295,7 +325,6 @@ class MemberPage(QWidget):
         tbl.setSelectionBehavior(QTableWidget.SelectRows)
         tbl.setSelectionMode(QTableWidget.SingleSelection)
         tbl.setEditTriggers(QTableWidget.NoEditTriggers)
-
         tbl.setAlternatingRowColors(True)
         tbl.verticalHeader().setVisible(False)
         tbl.setSortingEnabled(True)
@@ -312,15 +341,11 @@ class MemberPage(QWidget):
         hdr.setSectionResizeMode(COL_GENDER, QHeaderView.ResizeToContents)
         hdr.setSectionResizeMode(COL_JOIN,   QHeaderView.ResizeToContents)
         hdr.setMinimumSectionSize(80)
-
         tbl.setColumnWidth(COL_PHONE, 150)
 
         tbl.itemSelectionChanged.connect(self._on_selection_changed)
         tbl.doubleClicked.connect(self.open_edit_dialog)
-
         return tbl
-
-    # ── Empty-state label ─────────────────────────────────────────────── #
 
     @staticmethod
     def _build_empty_label() -> QLabel:
@@ -328,8 +353,6 @@ class MemberPage(QWidget):
         lbl.setObjectName("emptyState")
         lbl.setAlignment(Qt.AlignCenter)
         return lbl
-
-    # ── Nút bấm helper ───────────────────────────────────────────────── #
 
     @staticmethod
     def _make_btn(text: str, obj_name: str) -> QPushButton:
@@ -344,7 +367,6 @@ class MemberPage(QWidget):
     # ══════════════════════════════════════════════════════════════════ #
 
     def _populate_table(self, members: list[dict]) -> None:
-        """Điền dữ liệu vào bảng và chuyển stack sang trạng thái phù hợp."""
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
 
@@ -388,7 +410,6 @@ class MemberPage(QWidget):
 
     @Slot()
     def load_data(self) -> None:
-        """Tải toàn bộ danh sách, không tìm kiếm."""
         try:
             members = self._controller.get_members()
         except RuntimeError as exc:
@@ -410,9 +431,7 @@ class MemberPage(QWidget):
 
         count = len(members)
         if query:
-            self._status_lbl.setText(
-                f"Tìm thấy {count} kết quả cho \"{query}\""
-            )
+            self._status_lbl.setText(f"Tìm thấy {count} kết quả cho \"{query}\"")
         else:
             self._status_lbl.setText(f"Tổng cộng {count} hội viên")
 
@@ -527,13 +546,6 @@ class MemberPage(QWidget):
 
     @Slot()
     def _on_generate_qr(self) -> None:
-        """
-        Slot xử lý nút "📷 Tạo QR":
-          1. Lấy member đang chọn
-          2. Gọi controller.generate_member_qr(member_id)
-          3. Thông báo thành công + hỏi có muốn mở file không
-          4. Hiển thị lỗi nếu thất bại
-        """
         member = self._selected_member()
         if member is None:
             QMessageBox.information(
@@ -548,18 +560,11 @@ class MemberPage(QWidget):
         try:
             qr_path = self._controller.generate_member_qr(member_id)
         except (ValueError, RuntimeError) as exc:
-            QMessageBox.critical(
-                self,
-                "❌  Tạo QR Thất Bại",
-                str(exc),
-            )
+            QMessageBox.critical(self, "❌  Tạo QR Thất Bại", str(exc))
             return
 
-        self._status_lbl.setText(
-            f"✅  Đã tạo QR cho hội viên {member_name} → {qr_path}"
-        )
+        self._status_lbl.setText(f"✅  Đã tạo QR cho hội viên {member_name} → {qr_path}")
 
-        # Hỏi người dùng có muốn mở file ảnh ngay không
         reply = QMessageBox.question(
             self,
             "✅  Tạo QR Thành Công",
@@ -574,11 +579,60 @@ class MemberPage(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(qr_path))
 
     # ══════════════════════════════════════════════════════════════════ #
+    #  Chụp Ảnh  (Phase 10 — NEW)                                       #
+    # ══════════════════════════════════════════════════════════════════ #
+
+    @Slot()
+    def _on_capture_photo(self) -> None:
+        """
+        Slot xử lý nút "📸 Chụp Ảnh":
+          1. Lấy member đang chọn
+          2. Mở camera, chụp 1 frame, lưu vào images/members/{id}.jpg
+          3. Cập nhật image_path trong DB
+          4. Thông báo kết quả
+        """
+        member = self._selected_member()
+        if member is None:
+            QMessageBox.information(
+                self, "Chưa Chọn",
+                "Vui lòng chọn một hội viên trong bảng để chụp ảnh."
+            )
+            return
+
+        member_id   = member["id"]
+        member_name = member["name"]
+
+        try:
+            image_path = _capture_member_photo(member_id)
+        except RuntimeError as exc:
+            QMessageBox.critical(self, "❌  Chụp Ảnh Thất Bại", str(exc))
+            return
+
+        # Lưu đường dẫn vào DB
+        try:
+            self._db.update_member_image(member_id, image_path)
+        except Exception as exc:
+            QMessageBox.warning(
+                self, "⚠️  Lưu Ảnh Thất Bại",
+                f"Ảnh đã chụp nhưng không lưu được đường dẫn vào DB:\n{exc}"
+            )
+            return
+
+        self._status_lbl.setText(
+            f"📸  Đã chụp và lưu ảnh cho {member_name} → {image_path}"
+        )
+        QMessageBox.information(
+            self,
+            "📸  Chụp Ảnh Thành Công",
+            f"Đã lưu ảnh cho hội viên <b>{member_name}</b>.<br>"
+            f"📁 File: <code>{image_path}</code>",
+        )
+
+    # ══════════════════════════════════════════════════════════════════ #
     #  Helpers                                                           #
     # ══════════════════════════════════════════════════════════════════ #
 
     def _selected_member(self) -> dict | None:
-        """Trả về dict hội viên đang được chọn trong bảng, hoặc None."""
         rows = self.table.selectionModel().selectedRows()
         if not rows:
             return None
@@ -600,4 +654,5 @@ class MemberPage(QWidget):
         has_sel = bool(self.table.selectionModel().selectedRows())
         self.btn_edit.setEnabled(has_sel)
         self.btn_delete.setEnabled(has_sel)
-        self.btn_qr.setEnabled(has_sel)       # ← MỚI: đồng bộ nút QR
+        self.btn_qr.setEnabled(has_sel)
+        self.btn_photo.setEnabled(has_sel)    # ← NEW

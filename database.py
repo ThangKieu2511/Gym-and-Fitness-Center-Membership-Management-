@@ -1,4 +1,3 @@
-
 import sqlite3
 import bcrypt
 import logging
@@ -54,6 +53,7 @@ class Database:
         self.connection: Optional[sqlite3.Connection] = None
         self.connect()
         self.create_tables()
+        self._migrate()          # ← NEW: chạy migration sau create_tables
         self._seed_default_admin()
 
     # ------------------------------------------------------------------
@@ -66,13 +66,10 @@ class Database:
             self.connection = sqlite3.connect(
                 self.db_path,
                 detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
-                check_same_thread=False,   # safe for PySide6 multi-thread usage
+                check_same_thread=False,
             )
-            # Return rows as sqlite3.Row so column access by name works
             self.connection.row_factory = sqlite3.Row
-            # Enable WAL for better concurrency and crash safety
             self.connection.execute("PRAGMA journal_mode=WAL;")
-            # Enforce foreign-key constraints
             self.connection.execute("PRAGMA foreign_keys=ON;")
             logger.info("Connected to database: %s", self.db_path)
         except sqlite3.Error as exc:
@@ -126,7 +123,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS plans (
                 id       INTEGER PRIMARY KEY AUTOINCREMENT,
                 name     TEXT    NOT NULL,
-                duration INTEGER,   -- in days
+                duration INTEGER,
                 price    REAL
             )
             """,
@@ -174,6 +171,31 @@ class Database:
             raise
 
     # ------------------------------------------------------------------
+    # Migration — chỉ ALTER TABLE nếu column chưa tồn tại
+    # ------------------------------------------------------------------
+
+    def _migrate(self) -> None:
+        """Chạy migration tăng dần — an toàn, idempotent."""
+        self._add_column_if_missing("members", "image_path", "TEXT")
+
+    def _add_column_if_missing(self, table: str, column: str, col_type: str) -> None:
+        """ALTER TABLE … ADD COLUMN nếu column chưa tồn tại."""
+        try:
+            cursor = self.connection.execute(f"PRAGMA table_info({table})")
+            cols = [row[1] for row in cursor.fetchall()]
+            if column not in cols:
+                self.connection.execute(
+                    f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"
+                )
+                self.connection.commit()
+                logger.info("Migration: added column '%s' to table '%s'.", column, table)
+            else:
+                logger.debug("Migration: column '%s.%s' already exists.", table, column)
+        except sqlite3.Error as exc:
+            logger.exception("Migration error for %s.%s: %s", table, column, exc)
+            raise
+
+    # ------------------------------------------------------------------
     # Internal utilities
     # ------------------------------------------------------------------
 
@@ -184,7 +206,6 @@ class Database:
         *,
         fetch: str = "none",
     ):
-        
         try:
             with self.connection:
                 cursor = self.connection.execute(sql, params)
@@ -194,7 +215,6 @@ class Database:
                 if fetch == "all":
                     rows = cursor.fetchall()
                     return _rows_to_dicts(cursor, rows)
-                # fetch == "none"
                 return cursor.lastrowid
         except sqlite3.IntegrityError as exc:
             logger.warning("Integrity error: %s | SQL: %s | params: %s", exc, sql, params)
@@ -208,18 +228,6 @@ class Database:
     # ==================================================================
 
     def create_user(self, username: str, password: str) -> int:
-        """
-        Create a new user with a bcrypt-hashed password.
-
-        Parameters
-        ----------
-        username : str  — must be unique
-        password : str  — plain-text password (will be hashed)
-
-        Returns
-        -------
-        int — ``lastrowid`` of the new record
-        """
         password_hash = bcrypt.hashpw(
             password.encode("utf-8"),
             bcrypt.gensalt(),
@@ -241,13 +249,6 @@ class Database:
         )
 
     def verify_user(self, username: str, password: str) -> bool:
-        """
-        Verify a user's credentials.
-
-        Returns
-        -------
-        bool — ``True`` if username exists and password matches, else ``False``
-        """
         user = self.get_user(username)
         if not user:
             logger.warning("Login attempt for unknown user: '%s'", username)
@@ -279,33 +280,17 @@ class Database:
         gender: str = "",
         join_date: str = "",
         qr_code: str = "",
+        image_path: str = "",      # ← NEW
     ) -> int:
-        """
-        Insert a new member record.
-
-        Parameters
-        ----------
-        name      : Full name (required)
-        phone     : Contact phone number
-        email     : Email address
-        gender    : ``"Male"`` | ``"Female"`` | ``"Other"``
-        join_date : ISO-8601 date string, e.g. ``"2024-01-15"``
-                    Defaults to today's date if empty.
-        qr_code   : QR code string / URL
-
-        Returns
-        -------
-        int — ``lastrowid`` of the new member
-        """
         if not join_date:
             join_date = date.today().isoformat()
 
         row_id = self._execute(
             """
-            INSERT INTO members (name, phone, email, gender, join_date, qr_code)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO members (name, phone, email, gender, join_date, qr_code, image_path)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, phone, email, gender, join_date, qr_code),
+            (name, phone, email, gender, join_date, qr_code, image_path),
         )
         logger.info("Member added: '%s' (id=%s)", name, row_id)
         return row_id
@@ -326,7 +311,6 @@ class Database:
         )
 
     def search_members(self, query: str) -> list[dict]:
-        
         pattern = f"%{query}%"
         return self._execute(
             """
@@ -349,18 +333,29 @@ class Database:
         gender: str = "",
         join_date: str = "",
         qr_code: str = "",
+        image_path: str | None = None,   # ← NEW  (None = không đổi)
     ) -> bool:
-        
         try:
             with self.connection:
-                cursor = self.connection.execute(
-                    """
-                    UPDATE members
-                    SET name=?, phone=?, email=?, gender=?, join_date=?, qr_code=?
-                    WHERE id=?
-                    """,
-                    (name, phone, email, gender, join_date, qr_code, member_id),
-                )
+                if image_path is None:
+                    # Giữ nguyên image_path cũ trong DB
+                    cursor = self.connection.execute(
+                        """
+                        UPDATE members
+                        SET name=?, phone=?, email=?, gender=?, join_date=?, qr_code=?
+                        WHERE id=?
+                        """,
+                        (name, phone, email, gender, join_date, qr_code, member_id),
+                    )
+                else:
+                    cursor = self.connection.execute(
+                        """
+                        UPDATE members
+                        SET name=?, phone=?, email=?, gender=?, join_date=?, qr_code=?, image_path=?
+                        WHERE id=?
+                        """,
+                        (name, phone, email, gender, join_date, qr_code, image_path, member_id),
+                    )
                 updated = cursor.rowcount > 0
             if updated:
                 logger.info("Member updated: id=%s", member_id)
@@ -371,8 +366,23 @@ class Database:
             logger.exception("Error updating member id=%s: %s", member_id, exc)
             raise
 
+    def update_member_image(self, member_id: int, image_path: str) -> bool:
+        """Cập nhật chỉ image_path cho member."""
+        try:
+            with self.connection:
+                cursor = self.connection.execute(
+                    "UPDATE members SET image_path=? WHERE id=?",
+                    (image_path, member_id),
+                )
+                updated = cursor.rowcount > 0
+            if updated:
+                logger.info("Member image updated: id=%s → %s", member_id, image_path)
+            return updated
+        except sqlite3.Error as exc:
+            logger.exception("Error updating member image id=%s: %s", member_id, exc)
+            raise
+
     def delete_member(self, member_id: int) -> bool:
-        
         try:
             with self.connection:
                 cursor = self.connection.execute(
@@ -394,7 +404,6 @@ class Database:
     # ==================================================================
 
     def add_plan(self, name: str, duration: int, price: float) -> int:
-        
         row_id = self._execute(
             "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
             (name, duration, price),
@@ -417,7 +426,6 @@ class Database:
             fetch="one",
         )
 
-
     def get_plan_by_name(self, name: str):
         return self._execute(
             "SELECT * FROM plans WHERE name = ?",
@@ -430,6 +438,7 @@ class Database:
             "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
             (name, duration, price)
         )
+
     def update_plan(self, plan_id: int, name: str, duration: int, price: float) -> bool:
         """Update a plan's details. Returns ``True`` if a row was modified."""
         try:
@@ -478,13 +487,11 @@ class Database:
         end_date: str = "",
         status: str = "active",
     ) -> int:
-        
         from datetime import timedelta
 
         if not start_date:
             start_date = date.today().isoformat()
 
-        # Auto-calculate end_date from the plan's duration when not given
         if not end_date:
             plan = self.get_plan(plan_id)
             if plan and plan.get("duration"):
@@ -505,7 +512,6 @@ class Database:
         return row_id
 
     def get_subscriptions(self, member_id: int) -> list[dict]:
-        
         return self._execute(
             """
             SELECT s.*, p.name AS plan_name, p.price, p.duration
@@ -519,7 +525,6 @@ class Database:
         )
 
     def get_active_subscription(self, member_id: int) -> Optional[dict]:
-        
         today = date.today().isoformat()
         return self._execute(
             """
@@ -537,7 +542,6 @@ class Database:
         )
 
     def expire_outdated_subscriptions(self) -> int:
-        
         today = date.today().isoformat()
         try:
             with self.connection:
@@ -602,7 +606,6 @@ class Database:
         member_id: Optional[int] = None,
         limit: int = 100,
     ) -> list[dict]:
-        
         if member_id is not None:
             return self._execute(
                 """
@@ -641,7 +644,7 @@ class Database:
             WHERE  c.checkin_time BETWEEN ? AND ?
             ORDER BY c.checkin_time DESC
             """,
-            (start,end),
+            (start, end),
             fetch="all",
         )
 

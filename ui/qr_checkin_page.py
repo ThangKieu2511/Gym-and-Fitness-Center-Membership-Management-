@@ -1,14 +1,18 @@
 """
-ui/qr_checkin_page.py  —  Phase 9
+ui/qr_checkin_page.py  —  Phase 10
 
-Trang check-in bằng QR camera.
-Nếu opencv-python hoặc pyzbar chưa được cài, trang sẽ hiển thị
-hướng dẫn cài thay vì crash toàn bộ app.
+Trang QR Check-in.
+- Hiển thị kết quả từ QRService (background scan) qua show_result()
+- Bên phải khung camera: QLabel hiển thị ảnh member khi scan thành công
+- Vẫn giữ nút manual để xem live camera feed nếu muốn
+- Nếu opencv/pyzbar chưa cài → hiện hướng dẫn, không crash app
 
 QR format: "member:<id>"   ví dụ: "member:42"
 """
 
 from __future__ import annotations
+
+import os
 
 from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtWidgets import (
@@ -24,16 +28,18 @@ from PySide6.QtWidgets import (
 try:
     import cv2
     from PySide6.QtGui import QImage, QPixmap
-    from pyzbar import pyzbar
+    from pyzbar import pyzbar  # noqa: F401
     from controllers.qr_controller import QRController
     _DEPS_OK = True
 except ImportError as _import_err:
     _DEPS_OK = False
     _IMPORT_ERR_MSG = str(_import_err)
 
-# Kích thước khung camera
-FRAME_W = 640
-FRAME_H = 480
+FRAME_W = 560
+FRAME_H = 420
+
+MEMBER_IMG_W = FRAME_W
+MEMBER_IMG_H = FRAME_H
 
 STATUS_COLORS = {
     "valid":           "#22c55e",
@@ -42,14 +48,19 @@ STATUS_COLORS = {
     "error":           "#ef4444",
 }
 
+STATUS_ICONS = {
+    "valid":           "✅",
+    "expired":         "⚠️",
+    "no_subscription": "❌",
+    "error":           "❌",
+}
+
 
 # ══════════════════════════════════════════════════════════════════════════ #
-#  Trang thông báo thiếu dependency                                          #
+#  Trang thiếu dependency                                                    #
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class _MissingDepsPage(QWidget):
-    """Hiển thị khi cv2 hoặc pyzbar chưa được cài đặt."""
-
     def __init__(self, err_msg: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -91,12 +102,14 @@ class _MissingDepsPage(QWidget):
         layout.addWidget(err_lbl)
 
     def _on_stop(self) -> None:
-        """Stub — để main_window gọi không bị lỗi."""
+        pass
+
+    def show_result(self, result: dict) -> None:  # noqa: ARG002
         pass
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
-#  Trang QR Check-in thực sự (chỉ dùng khi deps đã cài)                      #
+#  Trang QR Check-in thực sự                                                 #
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class _QRCheckinPageImpl(QWidget):
@@ -112,6 +125,8 @@ class _QRCheckinPageImpl(QWidget):
         self._result_timer.timeout.connect(self._on_result_timeout)
         self._setup_ui()
 
+    # ── Build UI ─────────────────────────────────────────────────────── #
+
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
@@ -124,45 +139,9 @@ class _QRCheckinPageImpl(QWidget):
         div.setObjectName("sidebarDivider")
         root.addWidget(div)
 
-        btn_row = QHBoxLayout()
-        self._btn_start = QPushButton("📷  Bắt Đầu Quét QR")
-        self._btn_start.setObjectName("btnPrimary")
-        self._btn_start.setMinimumHeight(38)
-        self._btn_start.setCursor(Qt.PointingHandCursor)
-        self._btn_start.clicked.connect(self._on_start)
-
-        self._btn_stop = QPushButton("⏹  Dừng Camera")
-        self._btn_stop.setObjectName("btnDanger")
-        self._btn_stop.setMinimumHeight(38)
-        self._btn_stop.setCursor(Qt.PointingHandCursor)
-        self._btn_stop.setEnabled(False)
-        self._btn_stop.clicked.connect(self._on_stop)
-
-        btn_row.addWidget(self._btn_start)
-        btn_row.addWidget(self._btn_stop)
-        btn_row.addStretch()
-        root.addLayout(btn_row)
-
-        self._cam_label = QLabel()
-        self._cam_label.setFixedSize(FRAME_W, FRAME_H)
-        self._cam_label.setAlignment(Qt.AlignCenter)
-        self._cam_label.setStyleSheet(
-            "background: #0f172a; border: 2px solid #334155; border-radius: 8px;"
-        )
-        self._cam_label.setText("Camera chưa được bật")
-        self._cam_label.setObjectName("statusLabel")
-
-        cam_wrap = QHBoxLayout()
-        cam_wrap.addWidget(self._cam_label)
-        cam_wrap.addStretch()
-        root.addLayout(cam_wrap)
-
-        self._result_lbl = QLabel("Hướng mã QR vào camera để check-in.")
-        self._result_lbl.setObjectName("statusLabel")
-        self._result_lbl.setWordWrap(True)
-        self._result_lbl.setMinimumHeight(48)
-        root.addWidget(self._result_lbl)
-
+        root.addLayout(self._build_status_card())
+        root.addLayout(self._build_camera_controls())
+        root.addLayout(self._build_main_area())   # camera + member photo
         root.addStretch()
 
     def _build_header(self) -> QHBoxLayout:
@@ -175,7 +154,7 @@ class _QRCheckinPageImpl(QWidget):
         title = QLabel("Check-in QR")
         title.setObjectName("pageTitle")
 
-        sub = QLabel("Quét mã QR hội viên để check-in tức thì")
+        sub = QLabel("Camera nền tự động quét — hoặc dùng nút bên dưới để xem live feed")
         sub.setObjectName("pageSubtitle")
 
         col = QVBoxLayout()
@@ -188,17 +167,161 @@ class _QRCheckinPageImpl(QWidget):
         hdr.addStretch()
         return hdr
 
+    def _build_status_card(self) -> QHBoxLayout:
+        """Card hiển thị kết quả check-in gần nhất."""
+        row = QHBoxLayout()
+
+        self._status_icon_lbl = QLabel("📋")
+        self._status_icon_lbl.setFixedWidth(40)
+        self._status_icon_lbl.setAlignment(Qt.AlignCenter)
+        self._status_icon_lbl.setStyleSheet("font-size: 28px;")
+
+        self._result_lbl = QLabel("Hướng mã QR vào camera để check-in tự động.")
+        self._result_lbl.setObjectName("statusLabel")
+        self._result_lbl.setWordWrap(True)
+        self._result_lbl.setMinimumHeight(56)
+
+        card = QFrame()
+        card.setObjectName("statusCard")
+        card.setStyleSheet(
+            "QFrame#statusCard {"
+            "  background: #1e293b;"
+            "  border: 1px solid #334155;"
+            "  border-radius: 10px;"
+            "  padding: 12px 16px;"
+            "}"
+        )
+        card_layout = QHBoxLayout(card)
+        card_layout.setSpacing(14)
+        card_layout.addWidget(self._status_icon_lbl)
+        card_layout.addWidget(self._result_lbl)
+
+        row.addWidget(card)
+        return row
+
+    def _build_camera_controls(self) -> QHBoxLayout:
+        btn_row = QHBoxLayout()
+
+        self._btn_start = QPushButton("📷  Xem Live Camera")
+        self._btn_start.setObjectName("btnPrimary")
+        self._btn_start.setMinimumHeight(38)
+        self._btn_start.setCursor(Qt.PointingHandCursor)
+        self._btn_start.clicked.connect(self._on_start)
+
+        self._btn_stop = QPushButton("⏹  Tắt Live Camera")
+        self._btn_stop.setObjectName("btnDanger")
+        self._btn_stop.setMinimumHeight(38)
+        self._btn_stop.setCursor(Qt.PointingHandCursor)
+        self._btn_stop.setEnabled(False)
+        self._btn_stop.clicked.connect(self._on_stop)
+
+        self._cam_status_lbl = QLabel("🟢  Camera nền đang chạy")
+        self._cam_status_lbl.setObjectName("appTagline")
+
+        btn_row.addWidget(self._btn_start)
+        btn_row.addWidget(self._btn_stop)
+        btn_row.addSpacing(16)
+        btn_row.addWidget(self._cam_status_lbl)
+        btn_row.addStretch()
+        return btn_row
+
+    def _build_main_area(self) -> QHBoxLayout:
+        """Khung camera bên trái + ảnh member bên phải."""
+        area = QHBoxLayout()
+        area.setSpacing(16)
+        area.addLayout(self._build_camera_view())
+        area.addLayout(self._build_member_photo_panel())
+        return area
+
+    def _build_camera_view(self) -> QVBoxLayout:
+        self._cam_label = QLabel()
+        self._cam_label.setFixedSize(FRAME_W, FRAME_H)
+        self._cam_label.setAlignment(Qt.AlignCenter)
+        self._cam_label.setStyleSheet(
+            "background: #0f172a;"
+            "border: 2px solid #334155;"
+            "border-radius: 8px;"
+            "color: #64748b;"
+            "font-size: 14px;"
+        )
+        self._cam_label.setText("Live feed tắt\n(Camera nền vẫn đang quét QR)")
+        self._cam_label.setObjectName("statusLabel")
+
+        wrap = QVBoxLayout()
+        wrap.addWidget(self._cam_label)
+        wrap.addStretch()
+        return wrap
+
+    def _build_member_photo_panel(self) -> QVBoxLayout:
+        """Panel bên phải: ảnh member + tên."""
+        panel = QVBoxLayout()
+        panel.setSpacing(8)
+        panel.setAlignment(Qt.AlignTop)
+
+        title = QLabel("👤  Hội Viên")
+        title.setObjectName("pageSubtitle")
+        title.setAlignment(Qt.AlignCenter)
+
+        # QLabel ảnh
+        self._member_img_lbl = QLabel()
+        self._member_img_lbl.setFixedSize(MEMBER_IMG_W, MEMBER_IMG_H)
+        self._member_img_lbl.setAlignment(Qt.AlignCenter)
+        self._member_img_lbl.setStyleSheet(
+            "background: #1e293b;"
+            "border: 2px solid #334155;"
+            "border-radius: 8px;"
+            "color: #64748b;"
+            "font-size: 13px;"
+        )
+        self._member_img_lbl.setText("No Image")
+
+        # Tên member
+        self._member_name_lbl = QLabel("")
+        self._member_name_lbl.setAlignment(Qt.AlignCenter)
+        self._member_name_lbl.setWordWrap(True)
+        self._member_name_lbl.setStyleSheet(
+            "color: #e2e8f0; font-weight: 600; font-size: 14px;"
+        )
+
+        panel.addWidget(title)
+        panel.addWidget(self._member_img_lbl)
+        panel.addWidget(self._member_name_lbl)
+        panel.addStretch()
+        return panel
+
+    # ── Public API ───────────────────────────────────────────────────── #
+
+    def show_result(self, result: dict) -> None:
+        """
+        Được QRService / main_window gọi khi có kết quả check-in.
+        Hiển thị message + đổi màu/icon + ảnh member theo result.
+        """
+        status  = result.get("status", "error")
+        message = result.get("message", "Lỗi không xác định.")
+        self._set_result(message, status)
+        self._show_member_photo(
+            result.get("image_path", ""),
+            result.get("member_name", ""),
+        )
+
+        if self._frame_timer.isActive():
+            self._frame_timer.stop()
+            self._result_timer.start(3000)
+
+    # ── Manual camera controls ────────────────────────────────────────── #
+
     @Slot()
     def _on_start(self) -> None:
-        self._qr_ctrl = QRController(on_result=self._on_checkin_result)
+        self._qr_ctrl = QRController(on_result=self._on_manual_checkin_result)
         if not self._qr_ctrl.start():
-            self._set_result("❌  Không thể mở camera. Kiểm tra lại thiết bị.", "error")
+            self._set_result("❌  Không thể mở camera.\n(Camera có thể đang được QRService dùng.)", "error")
+            self._qr_ctrl = None
             return
         self._btn_start.setEnabled(False)
         self._btn_stop.setEnabled(True)
+        self._cam_status_lbl.setText("🔴  Live feed đang chạy")
         self._frame_timer.start()
-        self._result_lbl.setStyleSheet("")
-        self._result_lbl.setText("🟢  Camera đang chạy — hướng mã QR vào khung hình.")
+        self._set_result("🟢  Camera live đang chạy — hướng mã QR vào khung hình.", "valid")
 
     @Slot()
     def _on_stop(self) -> None:
@@ -207,11 +330,11 @@ class _QRCheckinPageImpl(QWidget):
             self._qr_ctrl.stop()
             self._qr_ctrl = None
         self._cam_label.clear()
-        self._cam_label.setText("Camera đã dừng")
+        self._cam_label.setText("Live feed tắt\n(Camera nền vẫn đang quét QR)")
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
-        self._result_lbl.setStyleSheet("")
-        self._result_lbl.setText("Camera đã dừng.")
+        self._cam_status_lbl.setText("🟢  Camera nền đang chạy")
+        self._set_result("Live feed đã tắt.", "error")
 
     @Slot()
     def _tick(self) -> None:
@@ -232,27 +355,53 @@ class _QRCheckinPageImpl(QWidget):
         )
         self._cam_label.setPixmap(pix)
 
-    def _on_checkin_result(self, result: dict) -> None:
-        status = result.get("status", "error")
-        msg    = result.get("message", "Lỗi không xác định.")
-        self._set_result(msg, status)
+    def _on_manual_checkin_result(self, result: dict) -> None:
+        """Kết quả từ live feed manual."""
+        status  = result.get("status", "error")
+        message = result.get("message", "Lỗi không xác định.")
+        self._set_result(message, status)
+        self._show_member_photo(
+            result.get("image_path", ""),
+            result.get("member_name", ""),
+        )
         self._frame_timer.stop()
-        self._result_timer.start(4000)
+        self._result_timer.start(3000)
 
     @Slot()
     def _on_result_timeout(self) -> None:
+        """Sau 3 giây → resume live feed (nếu đang bật)."""
         if self._qr_ctrl and self._qr_ctrl.is_running():
             self._qr_ctrl.reset_last()
             self._frame_timer.start()
-            self._result_lbl.setStyleSheet("")
-            self._result_lbl.setText("🟢  Sẵn sàng quét tiếp — hướng mã QR vào khung hình.")
+            self._set_result("🟢  Sẵn sàng quét tiếp — hướng mã QR vào khung hình.", "valid")
+
+    # ── Helpers ──────────────────────────────────────────────────────── #
 
     def _set_result(self, text: str, status: str) -> None:
         color = STATUS_COLORS.get(status, "#94a3b8")
+        icon  = STATUS_ICONS.get(status, "📋")
         self._result_lbl.setText(text)
         self._result_lbl.setStyleSheet(
             f"color: {color}; font-weight: 600; font-size: 14px;"
         )
+        self._status_icon_lbl.setText(icon)
+
+    def _show_member_photo(self, image_path: str, member_name: str) -> None:
+        """Load và hiển thị ảnh member lên panel bên phải."""
+        self._member_name_lbl.setText(member_name)
+
+        if image_path and os.path.isfile(image_path):
+            pix = QPixmap(image_path).scaled(
+                MEMBER_IMG_W,
+                MEMBER_IMG_H,
+                Qt.KeepAspectRatio,
+                Qt.SmoothTransformation,
+            )
+            self._member_img_lbl.setPixmap(pix)
+            self._member_img_lbl.setText("")
+        else:
+            self._member_img_lbl.clear()
+            self._member_img_lbl.setText("No Image")
 
     def closeEvent(self, event):  # noqa: N802
         self._on_stop()

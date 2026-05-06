@@ -1,7 +1,8 @@
 """
-controllers/qr_controller.py  —  Phase 9
+controllers/qr_controller.py  —  Phase 10
 
 Scan QR từ camera (OpenCV + pyzbar), decode member_id, gọi CheckinController.
+Sau check-in: lấy thêm member info (name, image_path) từ DB và đính vào result.
 
 QR format được hỗ trợ: "member:<id>"   ví dụ: "member:42"
 
@@ -18,6 +19,7 @@ import cv2
 from pyzbar import pyzbar
 
 from controllers.checkin_controller import CheckinController
+from database import Database
 
 
 class QRController:
@@ -26,7 +28,7 @@ class QRController:
 
     Dùng theo cách:
         ctrl = QRController(on_result=my_callback)
-        ctrl.start()   # gọi từ thread/timer
+        ctrl.start()
         ctrl.stop()
     """
 
@@ -37,14 +39,15 @@ class QRController:
         Parameters
         ----------
         on_result : Callable[[dict], None]
-            Callback nhận dict kết quả từ CheckinController.checkin()
-            Thêm key "member_id" vào dict trước khi gọi callback.
+            Callback nhận dict kết quả check-in, bao gồm:
+                status, message, checkin_id, member_id, member_name, image_path
         """
         self._on_result       = on_result
         self._checkin_ctrl    = CheckinController()
+        self._db              = Database()
         self._cap: cv2.VideoCapture | None = None
         self._running         = False
-        self._last_member_id: int | None = None   # tránh scan lặp liên tục
+        self._last_member_id: int | None = None
 
     # ── Public API ──────────────────────────────────────────────────── #
 
@@ -84,8 +87,7 @@ class QRController:
         member_id = self._decode_qr(frame)
         if member_id is not None and member_id != self._last_member_id:
             self._last_member_id = member_id
-            result = self._checkin_ctrl.checkin(member_id)
-            result["member_id"] = member_id
+            result = self._build_result(member_id)
             self._on_result(result)
 
         return True, frame
@@ -108,3 +110,21 @@ class QRController:
             if m:
                 return int(m.group(1))
         return None
+
+    def _build_result(self, member_id: int) -> dict:
+        """
+        Gọi checkin, sau đó bổ sung member_name và image_path vào result dict.
+        """
+        result = self._checkin_ctrl.checkin(member_id)
+        result["member_id"] = member_id
+
+        # Lấy thông tin member để hiển thị ảnh và tên
+        member_info = self._db.get_member(member_id)
+        if member_info:
+            result["member_name"] = member_info.get("name", "")
+            result["image_path"]  = member_info.get("image_path", "") or ""
+        else:
+            result["member_name"] = ""
+            result["image_path"]  = ""
+
+        return result
