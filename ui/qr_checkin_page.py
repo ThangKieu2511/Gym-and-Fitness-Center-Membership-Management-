@@ -6,6 +6,7 @@ Trang QR Check-in.
 - Bên phải khung camera: QLabel hiển thị ảnh member khi scan thành công
 - Vẫn giữ nút manual để xem live camera feed nếu muốn
 - Nếu opencv/pyzbar chưa cài → hiện hướng dẫn, không crash app
+- Giao diện được quản lý hoàn toàn bằng styles.qss
 
 QR format: "member:<id>"   ví dụ: "member:42"
 """
@@ -41,13 +42,7 @@ FRAME_H = 420
 MEMBER_IMG_W = FRAME_W
 MEMBER_IMG_H = FRAME_H
 
-STATUS_COLORS = {
-    "valid":           "#22c55e",
-    "expired":         "#f59e0b",
-    "no_subscription": "#ef4444",
-    "error":           "#ef4444",
-}
-
+# Giữ lại icons để set text động
 STATUS_ICONS = {
     "valid":           "✅",
     "expired":         "⚠️",
@@ -84,11 +79,7 @@ class _MissingDepsPage(QWidget):
 
         cmd = QLabel("pip install opencv-python pyzbar")
         cmd.setAlignment(Qt.AlignCenter)
-        cmd.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 13px;"
-            "background: #1e293b; color: #38bdf8;"
-            "padding: 10px 20px; border-radius: 6px;"
-        )
+        cmd.setObjectName("missingDepsCmd")
 
         err_lbl = QLabel(f"Chi tiết lỗi: {err_msg}")
         err_lbl.setAlignment(Qt.AlignCenter)
@@ -174,23 +165,17 @@ class _QRCheckinPageImpl(QWidget):
         self._status_icon_lbl = QLabel("📋")
         self._status_icon_lbl.setFixedWidth(40)
         self._status_icon_lbl.setAlignment(Qt.AlignCenter)
-        self._status_icon_lbl.setStyleSheet("font-size: 28px;")
+        self._status_icon_lbl.setObjectName("statusIcon")
 
         self._result_lbl = QLabel("Hướng mã QR vào camera để check-in tự động.")
-        self._result_lbl.setObjectName("statusLabel")
+        self._result_lbl.setObjectName("statusResultLabel")
+        self._result_lbl.setProperty("status", "default")
         self._result_lbl.setWordWrap(True)
         self._result_lbl.setMinimumHeight(56)
 
         card = QFrame()
         card.setObjectName("statusCard")
-        card.setStyleSheet(
-            "QFrame#statusCard {"
-            "  background: #1e293b;"
-            "  border: 1px solid #334155;"
-            "  border-radius: 10px;"
-            "  padding: 12px 16px;"
-            "}"
-        )
+        
         card_layout = QHBoxLayout(card)
         card_layout.setSpacing(14)
         card_layout.addWidget(self._status_icon_lbl)
@@ -250,15 +235,8 @@ class _QRCheckinPageImpl(QWidget):
         self._cam_label = QLabel()
         self._cam_label.setFixedSize(FRAME_W, FRAME_H)
         self._cam_label.setAlignment(Qt.AlignCenter)
-        self._cam_label.setStyleSheet(
-            "background: #0f172a;"
-            "border: 2px solid #334155;"
-            "border-radius: 8px;"
-            "color: #64748b;"
-            "font-size: 14px;"
-        )
+        self._cam_label.setObjectName("camViewLabel")
         self._cam_label.setText("Live feed tắt\n(Camera nền vẫn đang quét QR)")
-        self._cam_label.setObjectName("statusLabel")
 
         wrap = QVBoxLayout()
         wrap.setContentsMargins(0,0,0,0) 
@@ -273,15 +251,9 @@ class _QRCheckinPageImpl(QWidget):
 
         # 1. Image Label đóng vai trò là khung chứa (Container)
         self._member_img_lbl = QLabel()
-        # Đặt kích thước bằng với khung camera (không trừ 80 nữa)
         self._member_img_lbl.setFixedSize(MEMBER_IMG_W, MEMBER_IMG_H)
         self._member_img_lbl.setAlignment(Qt.AlignCenter)
-        self._member_img_lbl.setStyleSheet(
-            "background: #1e293b;"
-            "border: 2px solid #334155;"
-            "border-radius: 8px;"
-            "color: #64748b;"
-        )
+        self._member_img_lbl.setObjectName("memberImgLabel")
         self._member_img_lbl.setText("Chưa có ảnh")
 
         # 2. Tạo Overlay Layout nằm đè lên trên Image Label
@@ -292,27 +264,13 @@ class _QRCheckinPageImpl(QWidget):
         # Title ("Hội Viên")
         title = QLabel("👤  Hội Viên")
         title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet(
-            "color: #ffffff; "
-            "font-weight: bold; "
-            "font-size: 14px; "
-            "background: rgba(0, 0, 0, 150); "  # Nền đen bán trong suốt
-            "padding: 6px 16px; "
-            "border-radius: 6px;"
-        )
+        title.setObjectName("memberTitleLabel")
 
         # Name
         self._member_name_lbl = QLabel("")
         self._member_name_lbl.setAlignment(Qt.AlignCenter)
         self._member_name_lbl.setWordWrap(True)
-        self._member_name_lbl.setStyleSheet(
-            "color: #38bdf8; "
-            "font-weight: bold; "
-            "font-size: 20px; "
-            "background: rgba(0, 0, 0, 150); "  # Nền đen bán trong suốt
-            "padding: 8px 16px; "
-            "border-radius: 6px;"
-        )
+        self._member_name_lbl.setObjectName("memberNameLabel")
         self._member_name_lbl.hide()  # Ẩn đi khi chưa có khách hàng check-in
 
         # Thêm các text vào overlay
@@ -323,6 +281,7 @@ class _QRCheckinPageImpl(QWidget):
         panel.addWidget(self._member_img_lbl)
 
         return panel
+
     # ── Public API ───────────────────────────────────────────────────── #
 
     def show_result(self, result: dict) -> None:
@@ -412,13 +371,16 @@ class _QRCheckinPageImpl(QWidget):
     # ── Helpers ──────────────────────────────────────────────────────── #
 
     def _set_result(self, text: str, status: str) -> None:
-        color = STATUS_COLORS.get(status, "#94a3b8")
-        icon  = STATUS_ICONS.get(status, "📋")
+        icon = STATUS_ICONS.get(status, "📋")
         self._result_lbl.setText(text)
-        self._result_lbl.setStyleSheet(
-            f"color: {color}; font-weight: 600; font-size: 14px;"
-        )
         self._status_icon_lbl.setText(icon)
+        
+        # Cập nhật property 'status' để Qt tự động đổi màu theo file QSS
+        self._result_lbl.setProperty("status", status)
+        
+        # Bắt buộc UI render lại style cho widget này
+        self._result_lbl.style().unpolish(self._result_lbl)
+        self._result_lbl.style().polish(self._result_lbl)
 
     def _show_member_photo(self, image_path: str, member_name: str) -> None:
         """Load và hiển thị ảnh member lên panel bên phải."""

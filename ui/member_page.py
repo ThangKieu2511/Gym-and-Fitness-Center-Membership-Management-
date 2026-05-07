@@ -372,7 +372,11 @@ class MemberPage(QWidget):
 
         for row_idx, m in enumerate(members):
             self.table.insertRow(row_idx)
-            self._set_cell(row_idx, COL_ID, str(row_idx + 1), Qt.AlignCenter, real_id=m.get("id"))
+
+            real_id = m.get("id")
+            display_id = str(real_id).zfill(3) if real_id else ""
+            
+            self._set_cell(row_idx, COL_ID, display_id, Qt.AlignCenter, real_id=real_id)
             self._set_cell(row_idx, COL_NAME, m.get("name", ""), Qt.AlignCenter)
             self._set_cell(row_idx, COL_PHONE, m.get("phone", ""), Qt.AlignCenter)
             self._set_cell(row_idx, COL_EMAIL, m.get("email", ""), Qt.AlignCenter)

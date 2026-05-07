@@ -106,76 +106,12 @@ class LoginWindow(QWidget):
         root.addWidget(footer)
 
     def _apply_style(self):
-        self.setStyleSheet("""
-            #loginWindow {
-                background-color: #1a1d23;
-            }
-            #loginHeader {
-                background-color: #1a1d23;
-                background-color: transparent;
-            }
-            #loginTitle {
-                color: #ffffff;
-                font-size: 26px;
-                font-weight: bold;
-                font-family: 'Segoe UI';
-            }
-            #loginSubtitle {
-                color: #8b95a5;
-                font-size: 12px;
-                font-family: 'Segoe UI';
-            }
-            #loginCard {
-                background-color: #23262e;
-                border-radius: 12px;
-                min-width: 320px;
-                max-width: 320px;
-            }
-            #loginTitle, #loginSubtitle, #loginLabel, #loginFooter {
-                background: transparent; /* Thêm dòng này để xóa nền đen của chữ */
-            }
-            #loginLabel {
-                color: #c5cdd8;
-                font-size: 13px;
-                font-family: 'Segoe UI';
-                font-weight: 600;
-                background: transparent;
-            }
-            #loginInput {
-                background-color: #2c3040;
-                color: #e8edf2;
-                border: 1.5px solid #3a3f52;
-                border-radius: 7px;
-                padding: 0 12px;
-                font-size: 13px;
-                font-family: 'Segoe UI';
-            }
-            #loginInput:focus {
-                border-color: #5b8dee;
-                background-color: #2f3447;
-            }
-            #loginBtn {
-                background-color: #5b8dee;
-                color: #ffffff;
-                border: none;
-                border-radius: 8px;
-                font-size: 14px;
-                font-weight: bold;
-                font-family: 'Segoe UI';
-            }
-            #loginBtn:hover {
-                background-color: #4a7de0;
-            }
-            #loginBtn:pressed {
-                background-color: #3a6dd0;
-            }
-            #loginFooter {
-                color: #4a5060;
-                font-size: 11px;
-                font-family: 'Segoe UI';
-                padding: 10px;
-            }
-        """)
+        # Đọc file styles.qss và áp dụng cho LoginWindow
+        try:
+            with open("styles.qss", "r", encoding="utf-8") as f:
+                self.setStyleSheet(f.read())
+        except Exception as e:
+            print(f"Không thể tải file styles.qss: {e}")
 
     # ── Logic ─────────────────────────────────────────────────────────── #
 
