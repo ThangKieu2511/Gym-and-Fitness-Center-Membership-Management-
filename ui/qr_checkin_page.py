@@ -437,7 +437,7 @@ class _QRCheckinPageImpl(QWidget):
                 Qt.KeepAspectRatioByExpanding,
                 Qt.SmoothTransformation,
             )
-
+ 
             # Cắt ảnh ở giữa (Center Crop) để vừa khít hoàn toàn
             x = (pix.width() - MEMBER_IMG_W) // 2
             y = (pix.height() - MEMBER_IMG_H) // 2

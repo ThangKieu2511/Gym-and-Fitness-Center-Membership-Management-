@@ -46,14 +46,14 @@ class Database:
     """
 
     DEFAULT_ADMIN_USERNAME = "admin"
-    DEFAULT_ADMIN_PASSWORD = "admin123"
+    DEFAULT_ADMIN_PASSWORD = "123"       # ← đổi thành 123
 
     def __init__(self, db_path: str = "gym.db") -> None:
         self.db_path = db_path
         self.connection: Optional[sqlite3.Connection] = None
         self.connect()
         self.create_tables()
-        self._migrate()          # ← NEW: chạy migration sau create_tables
+        self._migrate()
         self._seed_default_admin()
 
     # ------------------------------------------------------------------
@@ -150,7 +150,7 @@ class Database:
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 member_id    INTEGER NOT NULL,
                 checkin_time TEXT,
-                status TEXT CHECK(status IN ('valid', 'expired')),
+                status TEXT CHECK(status IN ('valid', 'expired', 'no_subscription')),
                 FOREIGN KEY (member_id) REFERENCES members(id)
                     ON DELETE CASCADE ON UPDATE CASCADE
             )
@@ -264,7 +264,7 @@ class Database:
         """Insert the default admin account if it does not already exist."""
         if not self.get_user(self.DEFAULT_ADMIN_USERNAME):
             self.create_user(self.DEFAULT_ADMIN_USERNAME, self.DEFAULT_ADMIN_PASSWORD)
-            logger.info("Default admin account created.")
+            logger.info("Default admin account created (username=admin, password=123).")
         else:
             logger.debug("Default admin account already exists — skipping seed.")
 
@@ -280,7 +280,7 @@ class Database:
         gender: str = "",
         join_date: str = "",
         qr_code: str = "",
-        image_path: str = "",      # ← NEW
+        image_path: str = "",
     ) -> int:
         if not join_date:
             join_date = date.today().isoformat()
@@ -290,35 +290,47 @@ class Database:
             INSERT INTO members (name, phone, email, gender, join_date, qr_code, image_path)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, phone, email, gender, join_date, qr_code, image_path),
+            (name, phone or None, email or None, gender, join_date, qr_code or None, image_path or None),
         )
         logger.info("Member added: '%s' (id=%s)", name, row_id)
         return row_id
 
-    def get_members(self) -> list[dict]:
-        """Return all member records ordered by name."""
-        return self._execute(
-            "SELECT * FROM members ORDER BY name ASC",
-            fetch="all",
-        )
-
     def get_member(self, member_id: int) -> Optional[dict]:
-        """Fetch a single member by primary key."""
         return self._execute(
             "SELECT * FROM members WHERE id = ?",
             (member_id,),
             fetch="one",
         )
 
+    def get_member_by_qr(self, qr_code: str) -> Optional[dict]:
+        return self._execute(
+            "SELECT * FROM members WHERE qr_code = ?",
+            (qr_code,),
+            fetch="one",
+        )
+
+    def get_all_members(self) -> list[dict]:
+        return self._execute(
+            "SELECT * FROM members ORDER BY name",
+            fetch="all",
+        )
+    
+    def get_members(self, query: str = "") -> list[dict]:
+        """
+        Hàm dự phòng để sửa lỗi UI gọi get_members().
+        Nếu có query thì tìm kiếm, không thì trả về tất cả.
+        """
+        if query:
+            return self.search_members(query)
+        return self.get_all_members()
+
     def search_members(self, query: str) -> list[dict]:
         pattern = f"%{query}%"
         return self._execute(
             """
             SELECT * FROM members
-            WHERE name  LIKE ?
-               OR phone LIKE ?
-               OR email LIKE ?
-            ORDER BY name ASC
+            WHERE name LIKE ? OR phone LIKE ? OR email LIKE ?
+            ORDER BY name
             """,
             (pattern, pattern, pattern),
             fetch="all",
@@ -332,115 +344,106 @@ class Database:
         email: str = "",
         gender: str = "",
         join_date: str = "",
+        image_path: str = "",
         qr_code: str = "",
-        image_path: str | None = None,   # ← NEW  (None = không đổi)
     ) -> bool:
         try:
             with self.connection:
-                if image_path is None:
-                    # Giữ nguyên image_path cũ trong DB
-                    cursor = self.connection.execute(
-                        """
-                        UPDATE members
-                        SET name=?, phone=?, email=?, gender=?, join_date=?, qr_code=?
-                        WHERE id=?
-                        """,
-                        (name, phone, email, gender, join_date, qr_code, member_id),
-                    )
-                else:
-                    cursor = self.connection.execute(
-                        """
-                        UPDATE members
-                        SET name=?, phone=?, email=?, gender=?, join_date=?, qr_code=?, image_path=?
-                        WHERE id=?
-                        """,
-                        (name, phone, email, gender, join_date, qr_code, image_path, member_id),
-                    )
-                updated = cursor.rowcount > 0
-            if updated:
-                logger.info("Member updated: id=%s", member_id)
-            else:
-                logger.warning("update_member: no member found with id=%s", member_id)
-            return updated
-        except sqlite3.Error as exc:
-            logger.exception("Error updating member id=%s: %s", member_id, exc)
-            raise
-
-    def update_member_image(self, member_id: int, image_path: str) -> bool:
-        """Cập nhật chỉ image_path cho member."""
-        try:
-            with self.connection:
                 cursor = self.connection.execute(
-                    "UPDATE members SET image_path=? WHERE id=?",
-                    (image_path, member_id),
+                    """
+                    UPDATE members
+                    SET name=?, phone=?, email=?, gender=?, join_date=?, image_path=?, qr_code=?
+                    WHERE id=?
+                    """,
+                    (name, phone or None, email or None, gender, join_date, image_path or None, qr_code or None, member_id),
                 )
                 updated = cursor.rowcount > 0
             if updated:
-                logger.info("Member image updated: id=%s → %s", member_id, image_path)
+                logger.info("Member updated: id=%s name='%s'", member_id, name)
             return updated
         except sqlite3.Error as exc:
-            logger.exception("Error updating member image id=%s: %s", member_id, exc)
+            logger.exception("Error updating member id=%s: %s", member_id, exc)
             raise
 
     def delete_member(self, member_id: int) -> bool:
         try:
             with self.connection:
                 cursor = self.connection.execute(
-                    "DELETE FROM members WHERE id = ?",
-                    (member_id,),
+                    "DELETE FROM members WHERE id=?", (member_id,)
                 )
                 deleted = cursor.rowcount > 0
             if deleted:
                 logger.info("Member deleted: id=%s", member_id)
-            else:
-                logger.warning("delete_member: no member found with id=%s", member_id)
             return deleted
         except sqlite3.Error as exc:
             logger.exception("Error deleting member id=%s: %s", member_id, exc)
+            raise
+
+    def update_member_qr(self, member_id: int, qr_code: str) -> bool:
+        try:
+            with self.connection:
+                cursor = self.connection.execute(
+                    "UPDATE members SET qr_code=? WHERE id=?",
+                    (qr_code, member_id),
+                )
+                updated = cursor.rowcount > 0
+            if updated:
+                logger.info("QR code updated for member id=%s", member_id)
+            return updated
+        except sqlite3.Error as exc:
+            logger.exception("Error updating QR for member id=%s: %s", member_id, exc)
+            raise
+
+    def update_member_image(self, member_id: int, image_path: str) -> bool:
+        """Cập nhật đường dẫn ảnh của hội viên."""
+        try:
+            with self.connection:
+                cursor = self.connection.execute(
+                    "UPDATE members SET image_path=? WHERE id=?",
+                    (image_path or None, member_id),
+                )
+                updated = cursor.rowcount > 0
+            if updated:
+                logger.info("Image path updated for member id=%s -> %s", member_id, image_path)
+            return updated
+        except sqlite3.Error as exc:
+            logger.exception("Error updating image for member id=%s: %s", member_id, exc)
             raise
 
     # ==================================================================
     # PLANS
     # ==================================================================
 
-    def add_plan(self, name: str, duration: int, price: float) -> int:
+    def add_plan(self, name: str, duration: int = 30, price: float = 0.0) -> int:
         row_id = self._execute(
             "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
             (name, duration, price),
         )
-        logger.info("Plan added: '%s' (%d days, %.2f) id=%s", name, duration, price, row_id)
+        logger.info("Plan added: '%s' duration=%d price=%.2f (id=%s)", name, duration, price, row_id)
         return row_id
 
-    def get_plans(self) -> list[dict]:
-        """Return all plans ordered by duration."""
-        return self._execute(
-            "SELECT * FROM plans ORDER BY duration ASC",
-            fetch="all",
-        )
-
     def get_plan(self, plan_id: int) -> Optional[dict]:
-        """Fetch a single plan by primary key."""
         return self._execute(
             "SELECT * FROM plans WHERE id = ?",
             (plan_id,),
             fetch="one",
         )
 
-    def get_plan_by_name(self, name: str):
+    def get_all_plans(self) -> list[dict]:
         return self._execute(
-            "SELECT * FROM plans WHERE name = ?",
-            (name,),
-            fetch="one"
+            "SELECT * FROM plans ORDER BY name",
+            fetch="all",
         )
 
-    def create_plan(self, name: str, duration: int, price: float):
+    def get_plan_by_name(self, name: str) -> Optional[dict]:
+        """Lấy plan theo tên (dùng bởi SubscriptionController để tránh trùng lặp)."""
         return self._execute(
-            "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
-            (name, duration, price)
+            "SELECT * FROM plans WHERE name = ? LIMIT 1",
+            (name,),
+            fetch="one",
         )
 
     def update_plan(self, plan_id: int, name: str, duration: int, price: float) -> bool:
-        """Update a plan's details. Returns ``True`` if a row was modified."""
         try:
             with self.connection:
                 cursor = self.connection.execute(
@@ -450,26 +453,20 @@ class Database:
                 updated = cursor.rowcount > 0
             if updated:
                 logger.info("Plan updated: id=%s", plan_id)
-            else:
-                logger.warning("update_plan: no plan found with id=%s", plan_id)
             return updated
         except sqlite3.Error as exc:
             logger.exception("Error updating plan id=%s: %s", plan_id, exc)
             raise
 
     def delete_plan(self, plan_id: int) -> bool:
-        """Delete a plan. Returns ``True`` if a row was deleted."""
         try:
             with self.connection:
                 cursor = self.connection.execute(
-                    "DELETE FROM plans WHERE id = ?",
-                    (plan_id,),
+                    "DELETE FROM plans WHERE id=?", (plan_id,)
                 )
                 deleted = cursor.rowcount > 0
             if deleted:
                 logger.info("Plan deleted: id=%s", plan_id)
-            else:
-                logger.warning("delete_plan: no plan found with id=%s", plan_id)
             return deleted
         except sqlite3.Error as exc:
             logger.exception("Error deleting plan id=%s: %s", plan_id, exc)

@@ -17,7 +17,9 @@ from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt
 
-from ui.main_window import MainWindow
+from ui.login_window import LoginWindow
+
+
 def load_stylesheet(app):
     qss_path = Path(PROJECT_ROOT) / "styles" / "styles.qss"
 
@@ -46,9 +48,9 @@ def main() -> int:
     font = QFont("Segoe UI", 10)
     app.setFont(font)
 
-    # ── Launch window ──
-    window = MainWindow()
-    window.show()
+    # ── Show Login trước, MainWindow mở sau khi login thành công ──
+    login = LoginWindow()
+    login.show()
 
     return app.exec()
 
