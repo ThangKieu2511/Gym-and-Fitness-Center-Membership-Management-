@@ -41,14 +41,17 @@ class LoginWindow(QWidget):
         h_layout.setSpacing(4)
 
         icon = QLabel("🏋️")
+        icon.setAttribute(Qt.WA_TranslucentBackground)
         icon.setAlignment(Qt.AlignCenter)
         icon.setFont(QFont("Segoe UI", 36))
 
         title = QLabel("GymTK")
+        title.setAttribute(Qt.WA_TranslucentBackground)
         title.setObjectName("loginTitle")
         title.setAlignment(Qt.AlignCenter)
 
         subtitle = QLabel("Quản Lý Phòng Tập")
+        subtitle.setAttribute(Qt.WA_TranslucentBackground)
         subtitle.setObjectName("loginSubtitle")
         subtitle.setAlignment(Qt.AlignCenter)
 
@@ -109,6 +112,7 @@ class LoginWindow(QWidget):
             }
             #loginHeader {
                 background-color: #1a1d23;
+                background-color: transparent;
             }
             #loginTitle {
                 color: #ffffff;
@@ -127,11 +131,15 @@ class LoginWindow(QWidget):
                 min-width: 320px;
                 max-width: 320px;
             }
+            #loginTitle, #loginSubtitle, #loginLabel, #loginFooter {
+                background: transparent; /* Thêm dòng này để xóa nền đen của chữ */
+            }
             #loginLabel {
                 color: #c5cdd8;
                 font-size: 13px;
                 font-family: 'Segoe UI';
                 font-weight: 600;
+                background: transparent;
             }
             #loginInput {
                 background-color: #2c3040;
