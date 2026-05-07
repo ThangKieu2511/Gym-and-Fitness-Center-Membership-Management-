@@ -115,10 +115,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.nav_qr)
 
         layout.addStretch()
-        footer = QLabel("Giai Đoạn 9 — QR Check-in")
-        footer.setObjectName("appTagline")
-        footer.setAlignment(Qt.AlignCenter)
-        layout.addWidget(footer)
+        self.footer_status = QLabel("🟢 Camera QR đang hoạt động")
+        self.footer_status.setObjectName("systemStatus")
+        self.footer_status.setAlignment(Qt.AlignCenter)
+
+        layout.addWidget(self.footer_status)
         return sidebar
 
     def _build_content(self) -> QWidget:

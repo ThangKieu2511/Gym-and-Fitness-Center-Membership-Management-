@@ -11,8 +11,8 @@ QLabel {
 }
 /* ── Sidebar ── */
 #sidebar {
-    background-color: #161b27;
-    border-right: 1px solid #1e2535;
+    background-color: #151922;
+    border-right: 1px solid #222938;
     min-width: 220px;
     max-width: 220px;
 }
@@ -26,6 +26,19 @@ QLabel {
 #appTagline {
     font-size: 11px;
     color: #64748b;
+}
+
+#systemStatus {
+    color: #22c55e;
+    font-size: 11px;
+    font-weight: 600;
+
+    background-color: #18212f;
+
+    border: 1px solid #1f3b2d;
+    border-radius: 8px;
+
+    padding: 8px 10px;
 }
 
 #sectionLabel {
@@ -53,8 +66,11 @@ QLabel {
     color: #e2e8f0;
 }
 #navBtn[active="true"] {
-    background-color: #1d4ed8;
+    background-color: #2563eb;
     color: #ffffff;
+    border-left: 3px solid #60a5fa;
+    padding-left: 11px;
+    font-weight: 600;
 }
 #navBtn[active="true"]:hover {
     background-color: #2563eb;
@@ -139,9 +155,10 @@ QTableWidget {
     selection-background-color: #1d3a6e;
     selection-color: #e2e8f0;
     outline: none;
+    padding: 4px;
 }
 QTableWidget::item {
-    padding: 6px 10px;
+    padding: 10px 12px;
     border-bottom: 1px solid #1e2535;
 }
 QTableWidget::item:selected {
@@ -336,8 +353,11 @@ QSplitter::handle:hover {
 
 #statCard {
     background-color: #161b27;
-    border: 1px solid #1e2535;
-    border-radius: 10px;
+    border: 1px solid #222938;
+    border-radius: 12px;
+}
+#statCard:hover {
+    border-color: #2f6fed;
 }
 
 #statCardIcon {
