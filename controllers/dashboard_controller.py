@@ -244,6 +244,16 @@ class DashboardController:
         )
         return rows or []
 
+    # ── Doanh thu ───────────────────────────────────────────────────────── #
+
+    def get_month_revenue(self) -> float:
+        """Tổng doanh thu tháng hiện tại (tính theo start_date của subscription)."""
+        return self._db.get_month_revenue()
+
+    def get_year_revenue(self) -> float:
+        """Tổng doanh thu cả năm hiện tại (tính theo start_date của subscription)."""
+        return self._db.get_year_revenue()
+
     # ── Thống kê trạng thái check-in (cho Pie Chart) ───────────────────── #
 
     def get_checkin_status_stats(self) -> dict:
@@ -281,4 +291,4 @@ class DashboardController:
             if status in result:
                 result[status] = row["cnt"]
 
-        return result
+        return result   

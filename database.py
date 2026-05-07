@@ -692,3 +692,38 @@ class Database:
             "checkins_today":       checkins_today,
             "total_revenue":        total_revenue,
         }
+
+    def get_month_revenue(self, year: int | None = None, month: int | None = None) -> float:
+        """Tổng doanh thu từ các gói đăng ký có start_date trong tháng chỉ định."""
+        today = date.today()
+        y = year  if year  is not None else today.year
+        m = month if month is not None else today.month
+        month_prefix = f"{y:04d}-{m:02d}"
+        row = self._execute(
+            """
+            SELECT COALESCE(SUM(p.price), 0.0) AS total
+            FROM   subscriptions s
+            JOIN   plans p ON p.id = s.plan_id
+            WHERE  s.start_date LIKE ?
+            """,
+            (f"{month_prefix}%",),
+            fetch="one",
+        )
+        return float(row["total"]) if row else 0.0
+
+    def get_year_revenue(self, year: int | None = None) -> float:
+        """Tổng doanh thu từ các gói đăng ký có start_date trong năm chỉ định."""
+        today = date.today()
+        y = year if year is not None else today.year
+        year_prefix = f"{y:04d}"
+        row = self._execute(
+            """
+            SELECT COALESCE(SUM(p.price), 0.0) AS total
+            FROM   subscriptions s
+            JOIN   plans p ON p.id = s.plan_id
+            WHERE  s.start_date LIKE ?
+            """,
+            (f"{year_prefix}%",),
+            fetch="one",
+        )
+        return float(row["total"]) if row else 0.0

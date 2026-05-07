@@ -32,7 +32,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
-    QScrollArea,
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
@@ -65,8 +64,8 @@ class StatCard(QFrame):
 
     def _setup_ui(self, icon: str, label: str, value: str) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(4)
+        layout.setContentsMargins(10, 8, 10, 8)
+        layout.setSpacing(2)
 
         top = QHBoxLayout()
         top.setSpacing(8)
@@ -241,8 +240,11 @@ class MemberHistoryPanel(QWidget):
         self._table = _make_table(self.HEADERS)
         hdr = self._table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        
+        # Mở rộng cột thời gian check-in tối đa
         hdr.setSectionResizeMode(1, QHeaderView.Stretch)
         hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        
         layout.addWidget(self._table)
 
     def populate_members(self, members: list[dict]) -> None:
@@ -261,7 +263,9 @@ class MemberHistoryPanel(QWidget):
             r = self._table.rowCount()
             self._table.insertRow(r)
             _cell(self._table, r, 0, str(i + 1), Qt.AlignCenter)
-            _cell(self._table, r, 1, row.get("checkin_time", ""), Qt.AlignCenter)
+            
+            # Căn trái thời gian check-in để dễ nhìn hơn khi cột được kéo rộng
+            _cell(self._table, r, 1, row.get("checkin_time", ""), Qt.AlignLeft | Qt.AlignVCenter)
 
             status = row.get("status", "")
             if status == "valid":
@@ -294,13 +298,6 @@ class MemberHistoryPanel(QWidget):
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class ChartDialog(QDialog):
-    """
-    Dialog popup hiển thị:
-      - Pie chart : tỷ lệ valid / expired check-in tháng này
-      - Bar chart : top 5 hội viên theo số ngày đi tập
-    Mở bằng nút "📈 Xem Biểu Đồ" trên header Dashboard.
-    """
-
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("📈  Biểu Đồ Thống Kê Tháng Này")
@@ -314,17 +311,14 @@ class ChartDialog(QDialog):
         root.setContentsMargins(20, 16, 20, 16)
         root.setSpacing(12)
 
-        # Tiêu đề
         month_str = date.today().strftime("%m/%Y")
         title_lbl = QLabel(f"Thống kê tháng {month_str}")
         title_lbl.setObjectName("sectionTitle")
         root.addWidget(title_lbl)
 
-        # Hai chart cạnh nhau
         charts_row = QHBoxLayout()
         charts_row.setSpacing(24)
 
-        # ── Pie chart ──
         pie_col = QVBoxLayout()
         pie_col.setSpacing(6)
         pie_lbl = QLabel("🥧  Tỷ Lệ Check-in")
@@ -337,13 +331,11 @@ class ChartDialog(QDialog):
         pie_col.addWidget(self._pie_canvas)
         charts_row.addLayout(pie_col, stretch=1)
 
-        # Divider dọc
         vline = QFrame()
         vline.setFrameShape(QFrame.VLine)
         vline.setObjectName("sidebarDivider")
         charts_row.addWidget(vline)
 
-        # ── Bar chart ──
         bar_col = QVBoxLayout()
         bar_col.setSpacing(6)
         bar_lbl = QLabel("📊  Top 5 Hội Viên — Số Ngày Đi Tập")
@@ -358,74 +350,39 @@ class ChartDialog(QDialog):
 
         root.addLayout(charts_row)
 
-        # Nút đóng
         btn_box = QDialogButtonBox(QDialogButtonBox.Close)
         btn_box.rejected.connect(self.reject)
         root.addWidget(btn_box, alignment=Qt.AlignRight)
 
-    # ── Public API ────────────────────────────────────────────────────── #
-
     def load_data(self, checkin_status: dict, top_members: list[dict]) -> None:
-        """Nhận dữ liệu từ DashboardPage và vẽ cả hai chart."""
         self._draw_pie(checkin_status)
         self._draw_bar(top_members)
-
-    # ── Private drawing ───────────────────────────────────────────────── #
 
     def _draw_pie(self, stats: dict) -> None:
         valid   = stats.get("valid", 0)
         expired = stats.get("expired", 0)
-
         self._pie_figure.clear()
         ax = self._pie_figure.add_subplot(111)
-
         total = valid + expired
         if total == 0:
-            ax.text(0.5, 0.5, "Không có dữ liệu",
-                    ha="center", va="center", transform=ax.transAxes, fontsize=11)
+            ax.text(0.5, 0.5, "Không có dữ liệu", ha="center", va="center", transform=ax.transAxes, fontsize=11)
             ax.axis("off")
         else:
-            sizes  = [valid, expired]
-            labels = [f"Hợp lệ\n{valid}", f"Hết hạn\n{expired}"]
-            wedges, texts, autotexts = ax.pie(
-                sizes,
-                labels=labels,
-                autopct="%1.1f%%",
-                startangle=90,
-            )
-            for at in autotexts:
-                at.set_fontsize(10)
+            ax.pie([valid, expired], labels=[f"Hợp lệ\n{valid}", f"Hết hạn\n{expired}"], autopct="%1.1f%%", startangle=90)
             ax.set_title("Check-in theo trạng thái", fontsize=11, pad=8)
-
         self._pie_canvas.draw()
 
     def _draw_bar(self, rows: list[dict]) -> None:
         self._bar_figure.clear()
         ax = self._bar_figure.add_subplot(111)
-
         if not rows:
-            ax.text(0.5, 0.5, "Không có dữ liệu",
-                    ha="center", va="center", transform=ax.transAxes, fontsize=11)
+            ax.text(0.5, 0.5, "Không có dữ liệu", ha="center", va="center", transform=ax.transAxes, fontsize=11)
             ax.axis("off")
         else:
             names = [r.get("member_name", "") for r in rows]
             days  = [r.get("days_count", 0)   for r in rows]
-
-            bars = ax.bar(names, days)
-            ax.set_xlabel("Hội viên", fontsize=10)
-            ax.set_ylabel("Số ngày",  fontsize=10)
+            ax.bar(names, days)
             ax.set_title("Top 5 hội viên tháng này", fontsize=11, pad=8)
-            ax.tick_params(axis="x", labelsize=9)
-            ax.tick_params(axis="y", labelsize=9)
-
-            for bar, val in zip(bars, days):
-                ax.text(
-                    bar.get_x() + bar.get_width() / 2,
-                    bar.get_height() + 0.1,
-                    str(val),
-                    ha="center", va="bottom", fontsize=10,
-                )
-
         self._bar_canvas.draw()
 
 
@@ -438,22 +395,16 @@ class DashboardPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._ctrl = DashboardController()
-
-        # Cache dữ liệu chart — cập nhật mỗi lần refresh, dùng khi mở dialog
         self._cached_checkin_status: dict       = {"valid": 0, "expired": 0}
         self._cached_top_members:    list[dict] = []
-
         self._setup_ui()
         self.refresh_data()
 
-    # ── Build UI ─────────────────────────────────────────────────────── #
-
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 20, 24, 20)
-        root.setSpacing(16)
+        root.setContentsMargins(16, 12, 16, 12)
+        root.setSpacing(12)
 
-        # Header
         root.addLayout(self._build_header())
 
         div = QFrame()
@@ -461,41 +412,32 @@ class DashboardPage(QWidget):
         div.setObjectName("sidebarDivider")
         root.addWidget(div)
 
-        # Scrollable body
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
+        body_layout = QVBoxLayout()
+        body_layout.setContentsMargins(0, 0, 0, 0)
+        body_layout.setSpacing(12)
 
-        body = QWidget()
-        body_layout = QVBoxLayout(body)
-        body_layout.setContentsMargins(0, 0, 4, 0)
-        body_layout.setSpacing(20)
-
-        # ── Stat cards row ──
+        # ── 1. Stat cards ──
         body_layout.addLayout(self._build_stat_cards())
 
-        # ── Today detail + Top members (side by side) ──
+        # ── 2. Today detail + Top members (chia đều 50/50) ──
         mid_row = QHBoxLayout()
         mid_row.setSpacing(16)
 
         self._today_table = TodayDetailTable()
-        mid_row.addWidget(self._today_table, stretch=1)
+        mid_row.addWidget(self._today_table, stretch=1) # Chia đều diện tích
 
         self._top_table = TopMembersTable()
-        mid_row.addWidget(self._top_table, stretch=1)
+        mid_row.addWidget(self._top_table, stretch=1) # Chia đều diện tích
 
-        body_layout.addLayout(mid_row)
+        body_layout.addLayout(mid_row, stretch=1)
 
-        # ── Member history ──
+        # ── 3. Member history (đẩy lên cao hơn và chiếm không gian cân đối) ──
         self._history_panel = MemberHistoryPanel()
         self._history_panel._combo.currentIndexChanged.connect(self._on_history_member_changed)
-        body_layout.addWidget(self._history_panel)
+        body_layout.addWidget(self._history_panel, stretch=1)
 
-        body_layout.addStretch()
-        scroll.setWidget(body)
-        root.addWidget(scroll, stretch=1)
+        root.addLayout(body_layout, stretch=1)
 
-        # Status bar
         self._status_lbl = QLabel("")
         self._status_lbl.setObjectName("statusLabel")
         root.addWidget(self._status_lbl)
@@ -523,7 +465,6 @@ class DashboardPage(QWidget):
         hdr.addLayout(text_col)
         hdr.addStretch()
 
-        # ── Nút xem biểu đồ ──
         btn_chart = QPushButton("📈  Xem Biểu Đồ")
         btn_chart.setObjectName("btnNeutral")
         btn_chart.setMinimumHeight(34)
@@ -531,7 +472,6 @@ class DashboardPage(QWidget):
         btn_chart.clicked.connect(self._open_chart_dialog)
         hdr.addWidget(btn_chart)
 
-        # ── Nút làm mới ──
         btn_refresh = QPushButton("🔄  Làm Mới")
         btn_refresh.setObjectName("btnNeutral")
         btn_refresh.setMinimumHeight(34)
@@ -545,27 +485,26 @@ class DashboardPage(QWidget):
         grid = QGridLayout()
         grid.setSpacing(12)
 
-        self._card_today_total   = StatCard("🏃", "Tổng Check-in Hôm Nay",    "—", "#3b82f6")
-        self._card_today_people  = StatCard("👤", "Số Người Đi Tập Hôm Nay",  "—", "#10b981")
-        self._card_month_total   = StatCard("📅", "Tổng Check-in Tháng Này",  "—", "#8b5cf6")
-        self._card_month_people  = StatCard("👥", "Số Người Đi Tập Tháng Này","—", "#f59e0b")
-        self._card_active        = StatCard("✅", "Hội Viên Đang Active",      "—", "#22c55e")
+        self._card_today_total    = StatCard("🏃", "Tổng Check-in Hôm Nay",    "—", "#3b82f6")
+        self._card_today_people   = StatCard("👤", "Số Người Đi Tập Hôm Nay",  "—", "#10b981")
+        self._card_month_revenue  = StatCard("💰", "Doanh Thu Tháng Này",       "—", "#8b5cf6")
+        self._card_year_revenue   = StatCard("📈", "Doanh Thu Cả Năm",          "—", "#f97316")
+        self._card_month_people   = StatCard("👥", "Số Người Đi Tập Tháng Này","—", "#f59e0b")
+        self._card_active         = StatCard("✅", "Hội Viên Đang Active",      "—", "#22c55e")
 
-        grid.addWidget(self._card_today_total,  0, 0)
-        grid.addWidget(self._card_today_people, 0, 1)
-        grid.addWidget(self._card_month_total,  0, 2)
-        grid.addWidget(self._card_month_people, 0, 3)
-        grid.addWidget(self._card_active,       0, 4)
+        grid.addWidget(self._card_today_total,   0, 0)
+        grid.addWidget(self._card_today_people,  0, 1)
+        grid.addWidget(self._card_month_revenue, 0, 2)
+        grid.addWidget(self._card_year_revenue,  0, 3)
+        grid.addWidget(self._card_month_people,  0, 4)
+        grid.addWidget(self._card_active,        0, 5)
 
-        for col in range(5):
+        for col in range(6):
             grid.setColumnStretch(col, 1)
 
         return grid
 
-    # ── Data loading ─────────────────────────────────────────────────── #
-
     def refresh_data(self) -> None:
-        """Load / reload tất cả dữ liệu dashboard."""
         try:
             today_stats    = self._ctrl.get_today_stats()
             month_stats    = self._ctrl.get_month_stats()
@@ -574,22 +513,23 @@ class DashboardPage(QWidget):
             all_members    = self._ctrl.get_all_members()
             checkin_status = self._ctrl.get_checkin_status_stats()
 
-            # Cache cho chart dialog
             self._cached_checkin_status = checkin_status
             self._cached_top_members    = top_members
 
-            # Stat cards
             self._card_today_total.set_value(str(today_stats["total_checkins"]))
             self._card_today_people.set_value(str(today_stats["unique_members"]))
-            self._card_month_total.set_value(str(month_stats["total_checkins"]))
+
+            month_rev = self._ctrl.get_month_revenue()
+            year_rev  = self._ctrl.get_year_revenue()
+            self._card_month_revenue.set_value(f"{month_rev:,.0f} ₫")
+            self._card_year_revenue.set_value(f"{year_rev:,.0f} ₫")
+
             self._card_month_people.set_value(str(month_stats["unique_members"]))
             self._card_active.set_value(str(active_count))
 
-            # Tables
             self._today_table.load(today_stats["detail"])
             self._top_table.load(top_members)
 
-            # Member combobox — giữ lại selection nếu có
             current_id = self._history_panel.selected_member_id()
             self._history_panel.populate_members(all_members)
 
@@ -607,13 +547,8 @@ class DashboardPage(QWidget):
             now_str = date.today().strftime("%d/%m/%Y")
             self._status_lbl.setText(f"Cập nhật lúc: {now_str}")
 
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._status_lbl.setText(f"❌  Lỗi tải dữ liệu: {exc}")
-            self._status_lbl.setStyleSheet("color: #ef4444;")
-            QTimer.singleShot(
-                5000,
-                lambda: self._status_lbl.setStyleSheet(""),
-            )
 
     def _load_member_history(self) -> None:
         member_id = self._history_panel.selected_member_id()
@@ -623,15 +558,12 @@ class DashboardPage(QWidget):
         try:
             rows = self._ctrl.get_member_history(member_id)
             self._history_panel.load_history(rows)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             self._history_panel.load_history([])
             self._status_lbl.setText(f"❌  Lỗi tải lịch sử: {exc}")
 
-    # ── Slots ────────────────────────────────────────────────────────── #
-
     @Slot()
     def _open_chart_dialog(self) -> None:
-        """Mở dialog popup hiển thị biểu đồ với dữ liệu đã cache."""
         dlg = ChartDialog(self)
         dlg.load_data(self._cached_checkin_status, self._cached_top_members)
         dlg.exec()

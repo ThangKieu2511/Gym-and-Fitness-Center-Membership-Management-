@@ -105,7 +105,6 @@ QLabel {
     border-radius: 7px;
     padding: 0 14px;
     font-weight: 650;
-
 }
 #btnSecondary:hover   { background-color: #263047; color: #e2e8f0; }
 #btnSecondary:disabled { color: #374151; border-color: #1e2535; }
@@ -156,10 +155,8 @@ QHeaderView::section {
     font-weight: 600;
     letter-spacing: 0.8px;
     text-transform: uppercase;
-    
     padding: 8px 0px;
     text-align: center;
-    
     border: none;
     border-bottom: 1px solid #1e2535;
 }
@@ -268,7 +265,7 @@ QMessageBox QPushButton[text="&Yes"]:hover,
 QMessageBox QPushButton[text="Yes"]:hover { background-color: #991b1b; }
 
 /* ═══════════════════════════════════════════════════════════════════════ */
-/*  PHASE 5 — Subscription Page                                          */
+/* PHASE 5 — Subscription Page                                          */
 /* ═══════════════════════════════════════════════════════════════════════ */
 
 /* ── Panel title (dùng cho cả hai panel trong SubscriptionPage) ── */
@@ -334,7 +331,7 @@ QSplitter::handle:hover {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════ */
-/*  PHASE 8 — Dashboard                                                   */
+/* PHASE 8 — Dashboard                                                   */
 /* ═══════════════════════════════════════════════════════════════════════ */
 
 #statCard {
@@ -344,19 +341,19 @@ QSplitter::handle:hover {
 }
 
 #statCardIcon {
-    font-size: 18px;
+    font-size: 16px;
 }
 
 #statCardLabel {
-    font-size: 11px;
+    font-size: 9px;
     font-weight: 600;
     color: #64748b;
-    letter-spacing: 0.5px;
+    letter-spacing: 0px;
     text-transform: uppercase;
 }
 
 #statCardValue {
-    font-size: 28px;
+    font-size: 20px;
     font-weight: 700;
     padding-top: 2px;
 }
@@ -403,7 +400,7 @@ QSplitter::handle:hover {
 
 /* Xóa nền đen của các chữ bên trong form */
 #loginTitle, #loginSubtitle, #loginLabel, #loginFooter {
-    background: transparent; 
+    background: transparent;
 }
 
 #loginLabel {
