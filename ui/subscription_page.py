@@ -34,7 +34,6 @@ from controllers.subscription_controller import (
     PRICE_PER_MONTH,
     SubscriptionController,
 )
-# ← THÊM MỚI: import CheckinController
 from controllers.checkin_controller import CheckinController
 
 # ── Cột bảng ────────────────────────────────────────────────────────────── #
@@ -127,11 +126,9 @@ class RegistrationPanel(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._controller         = SubscriptionController()
-        self._checkin_controller = CheckinController()   # ← THÊM MỚI
+        self._checkin_controller = CheckinController()
         self._setup_ui()
         self._refresh_members()
-
-    # ── Build UI ─────────────────────────────────────────────────────── #
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -210,8 +207,6 @@ class RegistrationPanel(QWidget):
         lbl.setObjectName("formSectionLabel")
         return lbl
 
-    # ── Helpers ──────────────────────────────────────────────────────── #
-
     @Slot()
     def _refresh_members(self) -> None:
         prev_id = self._current_member_id()
@@ -263,8 +258,6 @@ class RegistrationPanel(QWidget):
         if member_id is None:
             QMessageBox.warning(self, "Thiếu Thông Tin", "Vui lòng chọn hội viên.")
         return member_id
-
-    # ── Slots: hành động ─────────────────────────────────────────────── #
 
     @Slot()
     def _on_register(self) -> None:
@@ -372,12 +365,10 @@ class RegistrationPanel(QWidget):
         if member_id is None:
             return
 
-        # Chống spam: disable 2 giây
         self._btn_checkin.setEnabled(False)
         QTimer.singleShot(2000, lambda: self._btn_checkin.setEnabled(True))
 
         try:
-            # ← GỌI CheckinController thay vì SubscriptionController
             result = self._checkin_controller.checkin(member_id)
         except Exception as exc:
             QMessageBox.critical(self, "❌  Lỗi Check-in", str(exc))
@@ -394,8 +385,6 @@ class RegistrationPanel(QWidget):
             QMessageBox.critical(self, "❌  Chưa Có Gói Tập", result["message"])
 
         self.checkin_done.emit(member_id, status)
-
-    # ── Public API ────────────────────────────────────────────────────── #
 
     def refresh_members(self) -> None:
         self._refresh_members()
@@ -501,17 +490,33 @@ class SubscriptionTable(QWidget):
 
             status = s.get("status", "")
             if status == "active":
-                btn = QPushButton("🚫  Huỷ")
+                btn = QPushButton("🚫 Huỷ")
                 btn.setObjectName("btnDanger")
-                btn.setFixedHeight(28)
+                
+                # --- NỚI RỘNG CHIỀU CAO VÀ PADDING ĐỂ KHÔNG CẮT CHỮ 'Y' ---
+                btn.setFixedSize(80, 32)  
+                btn.setStyleSheet("padding: 4px 8px;") 
+                
                 btn.setCursor(Qt.PointingHandCursor)
                 btn.clicked.connect(
                     lambda _, sid=s["id"], rname=s.get("plan_name", ""): self._on_cancel(sid, rname)
                 )
-                self._table.setCellWidget(row_idx, COL_ACTION, btn)
+
+                # Container bọc nút
+                container = QWidget()
+                container.setStyleSheet("background-color: transparent;")
+                
+                layout = QHBoxLayout(container)
+                layout.setContentsMargins(0, 0, 0, 0)
+                layout.setAlignment(Qt.AlignCenter)
+                layout.addWidget(btn)
+
+                self._table.setCellWidget(row_idx, COL_ACTION, container)
             else:
                 self._table.setCellWidget(row_idx, COL_ACTION, None)
-
+            
+            # Tăng nhẹ chiều cao hàng để bao trọn nút mới
+            self._table.setRowHeight(row_idx, 48)
         self._table.setSortingEnabled(True)
         count = len(subs)
         self._count_lbl.setText(f"{count} gói" if count else "Chưa có gói nào")
