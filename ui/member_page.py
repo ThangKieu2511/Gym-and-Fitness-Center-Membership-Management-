@@ -221,7 +221,7 @@ class MemberPage(QWidget):
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(24, 20, 24, 20)
-        root.setSpacing(14)
+        root.setSpacing(18)
 
         root.addLayout(self._build_header())
         root.addLayout(self._build_toolbar())
@@ -233,8 +233,18 @@ class MemberPage(QWidget):
 
         self._table_stack.addWidget(self.table)
         self._table_stack.addWidget(self._empty_lbl)
-        root.addWidget(self._table_stack, stretch=1)
 
+        # ── Table Card Wrapper ──
+        table_card = QFrame()
+        table_card.setObjectName("tableCard")
+
+        card_layout = QVBoxLayout(table_card)
+        card_layout.setContentsMargins(12, 12, 12, 12)
+        card_layout.setSpacing(0)
+
+        card_layout.addWidget(self._table_stack)
+
+        root.addWidget(table_card, stretch=1)
         self._status_lbl = QLabel("0 hội viên")
         self._status_lbl.setObjectName("statusLabel")
         root.addWidget(self._status_lbl)
@@ -326,7 +336,9 @@ class MemberPage(QWidget):
         tbl.setSelectionMode(QTableWidget.SingleSelection)
         tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         tbl.setAlternatingRowColors(True)
+       
         tbl.verticalHeader().setVisible(False)
+        tbl.verticalHeader().setDefaultSectionSize(50) # Premium row height
         tbl.setSortingEnabled(True)
         tbl.setShowGrid(False)
 
@@ -350,7 +362,7 @@ class MemberPage(QWidget):
     @staticmethod
     def _build_empty_label() -> QLabel:
         lbl = QLabel()
-        lbl.setObjectName("emptyState")
+        lbl.setObjectName("emptyStateLabel")
         lbl.setAlignment(Qt.AlignCenter)
         return lbl
 
@@ -359,7 +371,7 @@ class MemberPage(QWidget):
         btn = QPushButton(text)
         btn.setObjectName(obj_name)
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setMinimumHeight(36)
+        btn.setMinimumHeight(40)
         return btn
 
     # ══════════════════════════════════════════════════════════════════ #
@@ -656,6 +668,14 @@ class MemberPage(QWidget):
 
     def _sync_buttons(self) -> None:
         has_sel = bool(self.table.selectionModel().selectedRows())
+
+        self.btn_edit.setEnabled(has_sel)
+        self.btn_delete.setEnabled(has_sel)
+        self.btn_qr.setEnabled(has_sel)
+
+    def _sync_buttons(self) -> None:
+        has_sel = bool(self.table.selectionModel().selectedRows())
+
         self.btn_edit.setEnabled(has_sel)
         self.btn_delete.setEnabled(has_sel)
         self.btn_qr.setEnabled(has_sel)

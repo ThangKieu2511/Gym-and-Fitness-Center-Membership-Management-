@@ -156,26 +156,28 @@ QTableWidget {
     selection-color: #e2e8f0;
     outline: none;
     padding: 4px;
+    selection-behavior: select-rows;
 }
 QTableWidget::item {
     padding: 10px 12px;
     border-bottom: 1px solid #1e2535;
 }
+
 QTableWidget::item:selected {
-    background-color: #1d3a6e;
-    color: #e2e8f0;
+    background-color: #2563eb;
+    color: white;
 }
+
 QHeaderView::section {
     background-color: #1a2030;
-    color: #64748b;
+    color: #94a3b8;
     font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.8px;
-    text-transform: uppercase;
-    padding: 8px 0px;
-    text-align: center;
+    font-weight: 700;
+
+    padding: 10px 12px;
+
     border: none;
-    border-bottom: 1px solid #1e2535;
+    border-bottom: 1px solid #263041;
 }
 QScrollBar:vertical {
     background: #161b27;
@@ -193,7 +195,7 @@ QScrollBar::sub-line:vertical { height: 0; }
 /* ── Status label ── */
 #statusLabel {
     font-size: 11px;
-    color: #475569;
+    color: #94a3b8;
     padding-top: 2px;
 }
 
@@ -559,6 +561,21 @@ QFrame#statusCard {
     color: #64748b;
 }
 
+/* ── Search Input ── */
+#searchInput {
+    background-color: #161b27;
+    border: 1px solid #2d3748;
+    border-radius: 9px;
+    padding: 0 14px;
+    color: #e2e8f0;
+    font-size: 13px;
+}
+
+#searchInput:focus {
+    border: 1px solid #2563eb;
+    background-color: #1a2030;
+}
+
 #memberTitleLabel {
     color: #ffffff;
     font-weight: bold;
@@ -577,6 +594,11 @@ QFrame#statusCard {
     border-radius: 6px;
 }
 
+#tableCard {
+    background-color: #161b27;
+    border: 1px solid #222938;
+    border-radius: 14px;
+}
 #statusResultLabel {
     font-weight: 600;
     font-size: 14px;
