@@ -54,12 +54,13 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_content())
         self._member_page.data_changed.connect(self._subscription_page.refresh_members)
         self._member_page.data_changed.connect(self._dashboard_page.refresh_data)
+        # ── THAY ĐỔI: signal giờ truyền (member_id, member_name) ── #
         self._member_page.capture_photo_requested.connect(self.open_capture_page)
 
-    def open_capture_page(self, member_id: int):
+    def open_capture_page(self, member_id: int, member_name: str = "") -> None:
         """Chuyển sang trang QR và kích hoạt chế độ chụp ảnh."""
         self._navigate(3)
-        self._qr_page.start_capture_mode(member_id)
+        self._qr_page.start_capture_mode(member_id, member_name)
 
     def _build_sidebar(self) -> QWidget:
         sidebar = QWidget()

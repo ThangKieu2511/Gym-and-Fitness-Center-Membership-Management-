@@ -54,50 +54,6 @@ MEMBER_IMAGE_DIR = os.path.join("images", "members")
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
-#  Helper: chụp ảnh từ camera                                               #
-# ══════════════════════════════════════════════════════════════════════════ #
-
-def _capture_member_photo(member_id: int) -> str:
-    """
-    Mở camera, chụp 1 frame, lưu vào images/members/{member_id}.jpg.
-
-    Returns
-    -------
-    str — đường dẫn file ảnh đã lưu.
-
-    Raises
-    ------
-    RuntimeError — nếu không mở được camera hoặc không đọc được frame.
-    """
-    try:
-        import cv2
-    except ImportError as exc:
-        raise RuntimeError("opencv-python chưa được cài. Chạy: pip install opencv-python") from exc
-
-    os.makedirs(MEMBER_IMAGE_DIR, exist_ok=True)
-
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        raise RuntimeError("Không thể mở camera. Kiểm tra camera có được kết nối không.")
-
-    try:
-        # Đọc vài frame để camera ổn định ánh sáng
-        for _ in range(5):
-            cap.read()
-
-        ok, frame = cap.read()
-        if not ok or frame is None:
-            raise RuntimeError("Không đọc được frame từ camera.")
-
-        frame = cv2.flip(frame, 1)  # mirror
-        save_path = os.path.join(MEMBER_IMAGE_DIR, f"{member_id}.jpg")
-        cv2.imwrite(save_path, frame)
-        return save_path
-    finally:
-        cap.release()
-
-
-# ══════════════════════════════════════════════════════════════════════════ #
 #  MemberDialog — dùng chung cho Thêm và Sửa                               #
 # ══════════════════════════════════════════════════════════════════════════ #
 
@@ -202,7 +158,8 @@ class MemberPage(QWidget):
     """
 
     data_changed = Signal()
-    capture_photo_requested = Signal(int)
+    # ── THAY ĐỔI: signal truyền thêm member_name để QRCheckinPage hiển thị ── #
+    capture_photo_requested = Signal(int, str)  # (member_id, member_name)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -596,17 +553,15 @@ class MemberPage(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(qr_path))
 
     # ══════════════════════════════════════════════════════════════════ #
-    #  Chụp Ảnh  (Phase 10 — NEW)                                       #
+    #  Chụp Ảnh  (Phase 10 — UPDATED: emit signal thay vì chụp trực tiếp) #
     # ══════════════════════════════════════════════════════════════════ #
 
     @Slot()
     def _on_capture_photo(self) -> None:
         """
         Slot xử lý nút "📸 Chụp Ảnh":
-          1. Lấy member đang chọn
-          2. Mở camera, chụp 1 frame, lưu vào images/members/{id}.jpg
-          3. Cập nhật image_path trong DB
-          4. Thông báo kết quả
+          Emit capture_photo_requested(member_id, member_name) để MainWindow
+          chuyển sang QRCheckinPage và kích hoạt chế độ chụp ảnh.
         """
         member = self._selected_member()
         if member is None:
@@ -616,34 +571,7 @@ class MemberPage(QWidget):
             )
             return
 
-        member_id   = member["id"]
-        member_name = member["name"]
-
-        try:
-            image_path = _capture_member_photo(member_id)
-        except RuntimeError as exc:
-            QMessageBox.critical(self, "❌  Chụp Ảnh Thất Bại", str(exc))
-            return
-
-        # Lưu đường dẫn vào DB
-        try:
-            self._db.update_member_image(member_id, image_path)
-        except Exception as exc:
-            QMessageBox.warning(
-                self, "⚠️  Lưu Ảnh Thất Bại",
-                f"Ảnh đã chụp nhưng không lưu được đường dẫn vào DB:\n{exc}"
-            )
-            return
-
-        self._status_lbl.setText(
-            f"📸  Đã chụp và lưu ảnh cho {member_name} → {image_path}"
-        )
-        QMessageBox.information(
-            self,
-            "📸  Chụp Ảnh Thành Công",
-            f"Đã lưu ảnh cho hội viên <b>{member_name}</b>.<br>"
-            f"📁 File: <code>{image_path}</code>",
-        )
+        self.capture_photo_requested.emit(member["id"], member["name"])
 
     # ══════════════════════════════════════════════════════════════════ #
     #  Helpers                                                           #
@@ -666,13 +594,6 @@ class MemberPage(QWidget):
     @Slot()
     def _on_selection_changed(self) -> None:
         self._sync_buttons()
-
-    def _sync_buttons(self) -> None:
-        has_sel = bool(self.table.selectionModel().selectedRows())
-
-        self.btn_edit.setEnabled(has_sel)
-        self.btn_delete.setEnabled(has_sel)
-        self.btn_qr.setEnabled(has_sel)
 
     def _sync_buttons(self) -> None:
         has_sel = bool(self.table.selectionModel().selectedRows())
