@@ -108,6 +108,7 @@ class _QRCheckinPageImpl(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._qr_ctrl: "QRController | None" = None
+        self._capture_member_id = None
         self._frame_timer  = QTimer(self)
         self._result_timer = QTimer(self)
         self._frame_timer.setInterval(30)
@@ -200,11 +201,19 @@ class _QRCheckinPageImpl(QWidget):
         self._btn_stop.setEnabled(False)
         self._btn_stop.clicked.connect(self._on_stop)
 
+        self._btn_capture = QPushButton("📸  Chụp Ảnh")
+        self._btn_capture.setObjectName("btnSecondary")
+        self._btn_capture.setMinimumHeight(38)
+        self._btn_capture.setCursor(Qt.PointingHandCursor)
+        self._btn_capture.setVisible(False)
+        self._btn_capture.clicked.connect(self._capture_photo)
+
         self._cam_status_lbl = QLabel("🟢  Camera nền đang chạy")
         self._cam_status_lbl.setObjectName("appTagline")
 
         btn_row.addWidget(self._btn_start)
         btn_row.addWidget(self._btn_stop)
+        btn_row.addWidget(self._btn_capture)
         btn_row.addSpacing(16)
         btn_row.addWidget(self._cam_status_lbl)
         btn_row.addStretch()
@@ -301,6 +310,44 @@ class _QRCheckinPageImpl(QWidget):
             self._frame_timer.stop()
             self._result_timer.start(3000)
 
+    def start_capture_mode(self, member_id: int):
+        """Kích hoạt chế độ chụp ảnh cho hội viên cụ thể."""
+        self._capture_member_id = member_id
+        self._btn_capture.setVisible(True)
+        if not self._frame_timer.isActive():
+            self._on_start()
+        self._set_result("📸  Chế độ chụp ảnh — Bấm nút Chụp Ảnh để lưu.", "valid")
+
+    def _capture_photo(self):
+        """Chụp frame hiện tại và lưu làm ảnh hội viên."""
+        if not self._qr_ctrl:
+            return
+
+        ok, frame = self._qr_ctrl.read_frame()
+        if not ok or frame is None:
+            self._set_result("❌  Lỗi camera: Không thể lấy frame.", "error")
+            return
+
+        member_id = self._capture_member_id
+        save_dir  = os.path.join("images", "members")
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, f"{member_id}.jpg")
+
+        import cv2
+        # Giữ nguyên frame (đã mirror trong _display_frame nếu cần, 
+        # nhưng ở đây ta lưu frame gốc từ camera)
+        cv2.imwrite(save_path, frame)
+
+        from database import Database
+        db = Database()
+        db.update_member_image(member_id, save_path)
+        
+        member = db.get_member(member_id)
+        name = member["name"] if member else "Hội viên"
+        
+        self._show_member_photo(save_path, name)
+        self._set_result(f"✅  Đã chụp và lưu ảnh cho {name}", "valid")
+
     # ── Manual camera controls ────────────────────────────────────────── #
 
     @Slot()
@@ -326,6 +373,7 @@ class _QRCheckinPageImpl(QWidget):
         self._cam_label.setText("Live feed tắt\n(Camera nền vẫn đang quét QR)")
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
+        self._btn_capture.setVisible(False)
         self._cam_status_lbl.setText("🟢  Camera nền đang chạy")
         self._set_result("Live feed đã tắt.", "error")
 

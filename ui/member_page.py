@@ -202,6 +202,7 @@ class MemberPage(QWidget):
     """
 
     data_changed = Signal()
+    capture_photo_requested = Signal(int)
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
