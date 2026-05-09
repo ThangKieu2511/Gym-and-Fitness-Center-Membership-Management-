@@ -379,7 +379,14 @@ class ChartDialog(QDialog):
             ax.text(0.5, 0.5, "Không có dữ liệu", ha="center", va="center", transform=ax.transAxes, fontsize=11)
             ax.axis("off")
         else:
-            names = [r.get("member_name", "") for r in rows]
+            # Sửa phần lấy names tại đây:
+            names = []
+            for r in rows:
+                full_name = r.get("member_name", "").strip()
+                # Cắt chuỗi theo khoảng trắng và lấy từ cuối cùng (Tên)
+                short_name = full_name.split()[-1] if full_name else ""
+                names.append(short_name)
+                
             days  = [r.get("days_count", 0)   for r in rows]
             ax.bar(names, days)
             ax.set_title("Top 5 hội viên tháng này", fontsize=11, pad=8)

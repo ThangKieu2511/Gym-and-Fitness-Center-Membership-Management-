@@ -91,11 +91,22 @@ class PreviewCard(QFrame):
     def _info_row(parent_layout: QVBoxLayout, label_text: str) -> QLabel:
         row   = QHBoxLayout()
         row.setSpacing(6)
+        
         lbl_k = QLabel(label_text)
         lbl_k.setObjectName("previewKey")
         lbl_k.setMinimumWidth(130)
+        # Nới lỏng chiều cao tối thiểu để có không gian cho các chữ như g, y
+        lbl_k.setMinimumHeight(28) 
+        lbl_k.setStyleSheet("padding-bottom: 2px;") 
+        lbl_k.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
         lbl_v = QLabel("—")
         lbl_v.setObjectName("previewValue")
+        # Nới lỏng chiều cao tối thiểu
+        lbl_v.setMinimumHeight(28)
+        lbl_v.setStyleSheet("padding-bottom: 2px;")
+        lbl_v.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
         row.addWidget(lbl_k)
         row.addWidget(lbl_v, stretch=1)
         parent_layout.addLayout(row)
