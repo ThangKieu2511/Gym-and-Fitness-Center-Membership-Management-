@@ -1,5 +1,5 @@
 """
-ui/main_window.py  —  Phase 9  (QR background service)
+ui/main_window.py  —  Phase 11  (QR background service — single camera)
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ class MainWindow(QMainWindow):
         self.resize(1280, 780)
         self._setup_ui()
         self._navigate(0)
-        self._init_qr_service()   # ← background QR scan
+        self._init_qr_service()   # ← background QR scan + inject vào QRCheckinPage
 
     # ── Layout ───────────────────────────────────────────────────────── #
 
@@ -54,7 +54,6 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_content())
         self._member_page.data_changed.connect(self._subscription_page.refresh_members)
         self._member_page.data_changed.connect(self._dashboard_page.refresh_data)
-        # ── THAY ĐỔI: signal giờ truyền (member_id, member_name) ── #
         self._member_page.capture_photo_requested.connect(self.open_capture_page)
 
     def open_capture_page(self, member_id: int, member_name: str = "") -> None:
@@ -125,7 +124,6 @@ class MainWindow(QMainWindow):
         self.footer_status = QLabel("🟢 Camera QR đang hoạt động")
         self.footer_status.setObjectName("systemStatus")
         self.footer_status.setAlignment(Qt.AlignCenter)
-
         layout.addWidget(self.footer_status)
         return sidebar
 
@@ -155,11 +153,18 @@ class MainWindow(QMainWindow):
     # ── QR Background Service ─────────────────────────────────────────── #
 
     def _init_qr_service(self) -> None:
-        """Khởi tạo QRService chạy nền và kết nối signal."""
+        """Khởi tạo QRService chạy nền, inject vào QRCheckinPage và kết nối signal."""
         self._qr_service = QRService(parent=self)
 
         if not self._qr_service.is_available():
-            return  # opencv/pyzbar chưa cài — bỏ qua
+            self.footer_status.setText("🔴 Thiếu thư viện camera (opencv/pyzbar)")
+            return
+
+        # Inject service vào page để nhận frame — không mở camera thứ hai
+        self._qr_page.set_qr_service(self._qr_service)
+
+        # Đồng bộ footer_status với camera_status signal
+        self._qr_service.camera_status.connect(self._on_camera_status)
 
         # Debounce 3 giây — tránh spam khi quét liên tục
         self._qr_debounce_timer = QTimer(self)
@@ -168,6 +173,16 @@ class MainWindow(QMainWindow):
 
         self._qr_service.scanned.connect(self._on_qr_scanned)
         self._qr_service.start()
+
+    def _on_camera_status(self, text: str) -> None:
+        """Cập nhật footer_status khi trạng thái camera thay đổi."""
+        # Chuyển đổi text cho footer (ngắn gọn hơn)
+        if "hoạt động" in text or "đang chạy" in text:
+            self.footer_status.setText("🟢 Camera QR đang hoạt động")
+        elif "tắt" in text:
+            self.footer_status.setText("⚫ Camera QR đã tắt")
+        else:
+            self.footer_status.setText(f"🔴 {text}")
 
     def _on_qr_scanned(self, result: dict) -> None:
         """Handler khi QRService emit scanned."""
@@ -189,16 +204,12 @@ class MainWindow(QMainWindow):
 
     def _resume_qr_scan(self) -> None:
         """Cho phép QRService tiếp tục scan."""
-        if self._qr_service.is_running():
-            if self._qr_service._ctrl:
-                self._qr_service._ctrl.reset_last()
-            self._qr_service._timer.start()
+        self._qr_service.resume_scan()
 
     # ── Navigation ───────────────────────────────────────────────────── #
 
     def _navigate(self, index: int):
         # KHÔNG dừng QRService khi chuyển trang — camera chạy nền liên tục
-        # (Nút manual trong QRCheckinPage vẫn hoạt động độc lập nếu cần)
         self.stack.setCurrentIndex(index)
         for i, btn in enumerate(self._nav_buttons):
             btn.set_active(i == index)

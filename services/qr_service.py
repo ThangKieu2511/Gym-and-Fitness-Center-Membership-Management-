@@ -1,8 +1,9 @@
 """
-services/qr_service.py  —  Phase 9
+services/qr_service.py  —  Phase 11
 
 Background QR scanning service — singleton camera, chạy bằng QTimer.
 Không dùng thread. Không block UI.
+QRService là nơi DUY NHẤT giữ cv2.VideoCapture.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 from PySide6.QtCore import QObject, QTimer, Signal
 
 try:
+    import cv2
     from controllers.qr_controller import QRController
     _DEPS_OK = True
 except ImportError:
@@ -22,11 +24,14 @@ class QRService(QObject):
 
     Signals
     -------
-    scanned(dict) : emit khi decode được QR hợp lệ.
-        dict keys: status, message, checkin_id, member_id
+    scanned(dict)       : emit khi decode được QR hợp lệ.
+    frame_ready(object) : emit mỗi tick với frame BGR (numpy array) để live preview.
+    camera_status(str)  : emit khi trạng thái camera thay đổi — text hiển thị lên UI.
     """
 
-    scanned = Signal(dict)
+    scanned       = Signal(dict)
+    frame_ready   = Signal(object)   # cv2 BGR frame (numpy ndarray)
+    camera_status = Signal(str)      # status text cho footer / cam_status_lbl
 
     def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -35,6 +40,7 @@ class QRService(QObject):
         self._timer.setInterval(30)          # 30ms ≈ 33fps
         self._timer.timeout.connect(self._tick)
         self._available = _DEPS_OK
+        self._last_frame = None              # frame mới nhất để capture
 
     # ── Public API ──────────────────────────────────────────────────── #
 
@@ -52,8 +58,10 @@ class QRService(QObject):
         self._ctrl = QRController(on_result=self._on_result)
         if not self._ctrl.start(camera_index):
             self._ctrl = None
+            self.camera_status.emit("🔴  Không thể mở camera")
             return False
         self._timer.start()
+        self.camera_status.emit("🟢  Camera đang hoạt động")
         return True
 
     def stop(self) -> None:
@@ -62,19 +70,37 @@ class QRService(QObject):
         if self._ctrl:
             self._ctrl.stop()
             self._ctrl = None
+        self._last_frame = None
+        self.camera_status.emit("🔴  Camera đã tắt")
 
     def is_running(self) -> bool:
         return self._ctrl is not None and self._ctrl.is_running()
+
+    def capture_frame(self):
+        """Trả về frame cuối cùng (BGR numpy array) hoặc None."""
+        return self._last_frame
+
+    def resume_scan(self) -> None:
+        """Resume sau khi xử lý kết quả QR."""
+        if self.is_running():
+            if self._ctrl:
+                self._ctrl.reset_last()
+            if not self._timer.isActive():
+                self._timer.start()
 
     # ── Internal ────────────────────────────────────────────────────── #
 
     def _tick(self) -> None:
         """Được QTimer gọi mỗi 30ms — đọc frame và decode QR."""
-        if self._ctrl:
-            self._ctrl.read_frame()          # decode + callback xảy ra bên trong
+        if not self._ctrl:
+            return
+        ok, frame = self._ctrl.read_frame()
+        if ok and frame is not None:
+            self._last_frame = frame
+            self.frame_ready.emit(frame)
 
     def _on_result(self, result: dict) -> None:
         """QRController gọi callback này khi decode được QR."""
-        # Tạm dừng scan trong khi xử lý — QRController tự reset khi được gọi
+        # Tạm dừng scan trong khi xử lý
         self._timer.stop()
         self.scanned.emit(result)

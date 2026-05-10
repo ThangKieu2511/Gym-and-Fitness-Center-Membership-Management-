@@ -1,10 +1,11 @@
 """
-ui/qr_checkin_page.py  —  Phase 10
+ui/qr_checkin_page.py  —  Phase 11
 
 Trang QR Check-in.
+- KHÔNG mở camera riêng. Nhận frame từ QRService qua signal frame_ready.
 - Hiển thị kết quả từ QRService (background scan) qua show_result()
 - Bên phải khung camera: QLabel hiển thị ảnh member khi scan thành công
-- Vẫn giữ nút manual để xem live camera feed nếu muốn
+- Hỗ trợ capture mode: chụp ảnh hội viên từ frame hiện tại của QRService
 - Nếu opencv/pyzbar chưa cài → hiện hướng dẫn, không crash app
 - Giao diện được quản lý hoàn toàn bằng styles.qss
 
@@ -29,8 +30,6 @@ from PySide6.QtWidgets import (
 try:
     import cv2
     from PySide6.QtGui import QImage, QPixmap
-    from pyzbar import pyzbar  # noqa: F401
-    from controllers.qr_controller import QRController
     _DEPS_OK = True
 except ImportError as _import_err:
     _DEPS_OK = False
@@ -42,7 +41,6 @@ FRAME_H = 420
 MEMBER_IMG_W = FRAME_W
 MEMBER_IMG_H = FRAME_H
 
-# Giữ lại icons để set text động
 STATUS_ICONS = {
     "valid":           "✅",
     "expired":         "⚠️",
@@ -92,7 +90,7 @@ class _MissingDepsPage(QWidget):
         layout.addWidget(cmd)
         layout.addWidget(err_lbl)
 
-    def _on_stop(self) -> None:
+    def set_qr_service(self, service) -> None:  # noqa: ARG002
         pass
 
     def show_result(self, result: dict) -> None:  # noqa: ARG002
@@ -110,15 +108,27 @@ class _QRCheckinPageImpl(QWidget):
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self._qr_ctrl: "QRController | None" = None
+        self._qr_service = None          # được inject từ MainWindow
         self._capture_member_id = None
-        self._frame_timer  = QTimer(self)
+        self._live_preview_active = False
         self._result_timer = QTimer(self)
-        self._frame_timer.setInterval(30)
         self._result_timer.setSingleShot(True)
-        self._frame_timer.timeout.connect(self._tick)
         self._result_timer.timeout.connect(self._on_result_timeout)
+        self._clear_member_timer = QTimer(self)
+        self._clear_member_timer.setSingleShot(True)
+        self._clear_member_timer.timeout.connect(self._clear_member_photo)
         self._setup_ui()
+
+    # ── Inject QRService ─────────────────────────────────────────────── #
+
+    def set_qr_service(self, service) -> None:
+        """
+        Được MainWindow gọi sau khi khởi tạo QRService.
+        Kết nối signal frame_ready và camera_status.
+        """
+        self._qr_service = service
+        service.frame_ready.connect(self._on_frame_ready)
+        service.camera_status.connect(self._on_camera_status)
 
     # ── Build UI ─────────────────────────────────────────────────────── #
 
@@ -149,7 +159,7 @@ class _QRCheckinPageImpl(QWidget):
         title = QLabel("Check-in QR")
         title.setObjectName("pageTitle")
 
-        sub = QLabel("Camera nền tự động quét — hoặc dùng nút bên dưới để xem live feed")
+        sub = QLabel("Camera nền tự động quét — hoặc bật live preview để xem hình ảnh camera")
         sub.setObjectName("pageSubtitle")
 
         col = QVBoxLayout()
@@ -179,7 +189,7 @@ class _QRCheckinPageImpl(QWidget):
 
         card = QFrame()
         card.setObjectName("statusCard")
-        
+
         card_layout = QHBoxLayout(card)
         card_layout.setSpacing(14)
         card_layout.addWidget(self._status_icon_lbl)
@@ -195,14 +205,14 @@ class _QRCheckinPageImpl(QWidget):
         self._btn_start.setObjectName("btnPrimary")
         self._btn_start.setMinimumHeight(38)
         self._btn_start.setCursor(Qt.PointingHandCursor)
-        self._btn_start.clicked.connect(self._on_start)
+        self._btn_start.clicked.connect(self._on_start_preview)
 
         self._btn_stop = QPushButton("⏹  Tắt Live Camera")
         self._btn_stop.setObjectName("btnDanger")
         self._btn_stop.setMinimumHeight(38)
         self._btn_stop.setCursor(Qt.PointingHandCursor)
         self._btn_stop.setEnabled(False)
-        self._btn_stop.clicked.connect(self._on_stop)
+        self._btn_stop.clicked.connect(self._on_stop_preview)
 
         self._btn_capture = QPushButton("📸  Chụp Ảnh")
         self._btn_capture.setObjectName("btnSecondary")
@@ -251,9 +261,9 @@ class _QRCheckinPageImpl(QWidget):
         self._cam_label.setText("Live feed tắt\n(Camera nền vẫn đang quét QR)")
 
         wrap = QVBoxLayout()
-        wrap.setContentsMargins(0,0,0,0) 
+        wrap.setContentsMargins(0, 0, 0, 0)
         wrap.addWidget(self._cam_label)
-        wrap.addStretch()   
+        wrap.addStretch()
         return wrap
 
     def _build_member_photo_panel(self) -> QVBoxLayout:
@@ -261,37 +271,30 @@ class _QRCheckinPageImpl(QWidget):
         panel.setContentsMargins(0, 0, 0, 0)
         panel.setAlignment(Qt.AlignCenter)
 
-        # 1. Image Label đóng vai trò là khung chứa (Container)
         self._member_img_lbl = QLabel()
         self._member_img_lbl.setFixedSize(MEMBER_IMG_W, MEMBER_IMG_H)
         self._member_img_lbl.setAlignment(Qt.AlignCenter)
         self._member_img_lbl.setObjectName("memberImgLabel")
         self._member_img_lbl.setText("Chưa có ảnh")
 
-        # 2. Tạo Overlay Layout nằm đè lên trên Image Label
         overlay_layout = QVBoxLayout(self._member_img_lbl)
         overlay_layout.setAlignment(Qt.AlignCenter)
         overlay_layout.setSpacing(8)
 
-        # Title ("Hội Viên")
         title = QLabel("👤  Hội Viên")
         title.setAlignment(Qt.AlignCenter)
         title.setObjectName("memberTitleLabel")
 
-        # Name
         self._member_name_lbl = QLabel("")
         self._member_name_lbl.setAlignment(Qt.AlignCenter)
         self._member_name_lbl.setWordWrap(True)
         self._member_name_lbl.setObjectName("memberNameLabel")
-        self._member_name_lbl.hide()  # Ẩn đi khi chưa có khách hàng check-in
+        self._member_name_lbl.hide()
 
-        # Thêm các text vào overlay
         overlay_layout.addWidget(title)
         overlay_layout.addWidget(self._member_name_lbl)
 
-        # Thêm khung ảnh vào panel
         panel.addWidget(self._member_img_lbl)
-
         return panel
 
     # ── Public API ───────────────────────────────────────────────────── #
@@ -308,10 +311,20 @@ class _QRCheckinPageImpl(QWidget):
             result.get("image_path", ""),
             result.get("member_name", ""),
         )
+        # Auto clear sau 5 giây
+        self._clear_member_timer.start(5000)
 
-        if self._frame_timer.isActive():
-            self._frame_timer.stop()
+        # Tạm ẩn live feed 3 giây để xem kết quả
+        if self._live_preview_active:
             self._result_timer.start(3000)
+
+    def _clear_member_photo(self) -> None:
+        """Xóa ảnh hội viên sau vài giây."""
+        self._member_img_lbl.clear()
+        self._member_img_lbl.setText("Chưa có ảnh")
+
+        self._member_name_lbl.clear()
+        self._member_name_lbl.hide()
 
     def start_capture_mode(self, member_id: int, member_name: str = "") -> None:
         """
@@ -320,78 +333,92 @@ class _QRCheckinPageImpl(QWidget):
         """
         self._capture_member_id = member_id
         self._btn_capture.setVisible(True)
-        if not self._frame_timer.isActive():
-            self._on_start()
+        # Bật live preview nếu chưa bật
+        if not self._live_preview_active:
+            self._on_start_preview()
         name_display = f" — {member_name}" if member_name else ""
         self._set_result(
             f"📸  Chế độ chụp ảnh{name_display} — Bấm nút Chụp Ảnh để lưu.",
             "valid",
         )
 
-    def _capture_photo(self):
-        """Chụp frame hiện tại và lưu làm ảnh hội viên."""
-        if not self._qr_ctrl:
+    # ── Slots từ QRService ────────────────────────────────────────────── #
+
+    @Slot(object)
+    def _on_frame_ready(self, frame) -> None:
+        """Nhận frame từ QRService và hiển thị lên cam_label (nếu live preview bật)."""
+        if not self._live_preview_active:
             return
+        self._display_frame(frame)
 
-        ok, frame = self._qr_ctrl.read_frame()
-        if not ok or frame is None:
-            self._set_result("❌  Lỗi camera: Không thể lấy frame.", "error")
-            return
+    @Slot(str)
+    def _on_camera_status(self, text: str) -> None:
+        """Cập nhật label trạng thái camera trong trang."""
+        self._cam_status_lbl.setText(text)
 
-        member_id = self._capture_member_id
-        save_dir  = os.path.join("images", "members")
-        os.makedirs(save_dir, exist_ok=True)
-        save_path = os.path.join(save_dir, f"{member_id}.jpg")
-
-        import cv2 as _cv2
-        _cv2.imwrite(save_path, frame)
-
-        from database import Database
-        db = Database()
-        db.update_member_image(member_id, save_path)
-        
-        member = db.get_member(member_id)
-        name = member["name"] if member else "Hội viên"
-        
-        self._show_member_photo(save_path, name)
-        self._set_result(f"✅  Đã chụp và lưu ảnh cho {name}", "valid")
-
-    # ── Manual camera controls ────────────────────────────────────────── #
+    # ── Live preview controls ─────────────────────────────────────────── #
 
     @Slot()
-    def _on_start(self) -> None:
-        self._qr_ctrl = QRController(on_result=self._on_manual_checkin_result)
-        if not self._qr_ctrl.start():
-            self._set_result("❌  Không thể mở camera.\n(Camera có thể đang được QRService dùng.)", "error")
-            self._qr_ctrl = None
+    def _on_start_preview(self) -> None:
+        """Bật live preview — chỉ hiện frame, không mở camera mới."""
+        if self._qr_service and not self._qr_service.is_running():
+            self._set_result("❌  Camera nền chưa khởi động.", "error")
             return
+        self._live_preview_active = True
         self._btn_start.setEnabled(False)
         self._btn_stop.setEnabled(True)
         self._cam_status_lbl.setText("🟢  Live feed đang chạy")
-        self._frame_timer.start()
         self._set_result("🟢  Camera live đang chạy — hướng mã QR vào khung hình.", "valid")
 
     @Slot()
-    def _on_stop(self) -> None:
-        self._frame_timer.stop()
-        if self._qr_ctrl:
-            self._qr_ctrl.stop()
-            self._qr_ctrl = None
+    def _on_stop_preview(self) -> None:
+        """Tắt live preview — camera nền vẫn chạy."""
+        self._live_preview_active = False
         self._cam_label.clear()
         self._cam_label.setText("Live feed tắt\n(Camera nền vẫn đang quét QR)")
         self._btn_start.setEnabled(True)
         self._btn_stop.setEnabled(False)
         self._btn_capture.setVisible(False)
+        self._capture_member_id = None
         self._cam_status_lbl.setText("🟢  Camera nền đang chạy")
         self._set_result("Live feed đã tắt.", "error")
 
+    # ── Capture photo ─────────────────────────────────────────────────── #
+
     @Slot()
-    def _tick(self) -> None:
-        if not self._qr_ctrl:
+    def _capture_photo(self) -> None:
+        """Chụp frame hiện tại từ QRService và lưu làm ảnh hội viên."""
+        if not self._qr_service:
+            self._set_result("❌  QRService chưa được khởi tạo.", "error")
             return
-        ok, frame = self._qr_ctrl.read_frame()
-        if ok and frame is not None:
-            self._display_frame(frame)
+
+        frame = self._qr_service.capture_frame()
+        if frame is None:
+            self._set_result("❌  Lỗi camera: Không thể lấy frame.", "error")
+            return
+
+        member_id = self._capture_member_id
+        if member_id is None:
+            self._set_result("❌  Chưa chọn hội viên để chụp ảnh.", "error")
+            return
+
+        save_dir  = os.path.join("images", "members")
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, f"{member_id}.jpg")
+
+        cv2.imwrite(save_path, frame)
+
+        from database import Database
+        db = Database()
+        db.update_member_image(member_id, save_path)
+
+        member = db.get_member(member_id)
+        name = member["name"] if member else "Hội viên"
+
+        self._show_member_photo(save_path, name)
+        self._set_result(f"✅  Đã chụp và lưu ảnh cho {name}", "valid")
+
+    # ── Internal helpers ──────────────────────────────────────────────── #
 
     def _display_frame(self, frame) -> None:
         rgb  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -404,50 +431,28 @@ class _QRCheckinPageImpl(QWidget):
         )
         self._cam_label.setPixmap(pix)
 
-    def _on_manual_checkin_result(self, result: dict) -> None:
-        """Kết quả từ live feed manual."""
-        status  = result.get("status", "error")
-        message = result.get("message", "Lỗi không xác định.")
-        self._set_result(message, status)
-        self._show_member_photo(
-            result.get("image_path", ""),
-            result.get("member_name", ""),
-        )
-        self._frame_timer.stop()
-        self._result_timer.start(3000)
-
     @Slot()
     def _on_result_timeout(self) -> None:
         """Sau 3 giây → resume live feed (nếu đang bật)."""
-        if self._qr_ctrl and self._qr_ctrl.is_running():
-            self._qr_ctrl.reset_last()
-            self._frame_timer.start()
+        if self._live_preview_active:
             self._set_result("🟢  Sẵn sàng quét tiếp — hướng mã QR vào khung hình.", "valid")
-
-    # ── Helpers ──────────────────────────────────────────────────────── #
 
     def _set_result(self, text: str, status: str) -> None:
         icon = STATUS_ICONS.get(status, "📋")
         self._result_lbl.setText(text)
         self._status_icon_lbl.setText(icon)
-        
-        # Cập nhật property 'status' để Qt tự động đổi màu theo file QSS
         self._result_lbl.setProperty("status", status)
-        
-        # Bắt buộc UI render lại style cho widget này
         self._result_lbl.style().unpolish(self._result_lbl)
         self._result_lbl.style().polish(self._result_lbl)
 
     def _show_member_photo(self, image_path: str, member_name: str) -> None:
         """Load và hiển thị ảnh member lên panel bên phải."""
-        # Xử lý hiển thị tên
         if member_name:
             self._member_name_lbl.setText(member_name)
             self._member_name_lbl.show()
         else:
             self._member_name_lbl.hide()
 
-        # Xử lý hiển thị ảnh
         if image_path and os.path.isfile(image_path):
             pix = QPixmap(image_path).scaled(
                 MEMBER_IMG_W,
@@ -455,20 +460,13 @@ class _QRCheckinPageImpl(QWidget):
                 Qt.KeepAspectRatioByExpanding,
                 Qt.SmoothTransformation,
             )
- 
-            # Cắt ảnh ở giữa (Center Crop) để vừa khít hoàn toàn
-            x = (pix.width() - MEMBER_IMG_W) // 2
+            x = (pix.width()  - MEMBER_IMG_W) // 2
             y = (pix.height() - MEMBER_IMG_H) // 2
             pix = pix.copy(x, y, MEMBER_IMG_W, MEMBER_IMG_H)
-            
             self._member_img_lbl.setPixmap(pix)
         else:
             self._member_img_lbl.clear()
             self._member_img_lbl.setText("Chưa có ảnh")
-
-    def closeEvent(self, event):  # noqa: N802
-        self._on_stop()
-        super().closeEvent(event)
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
