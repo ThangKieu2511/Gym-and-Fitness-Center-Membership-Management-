@@ -3,3 +3,6 @@ qr_codes/
 
 # Captured member photos
 images/members/
+
+*.db
+*.sqlite
