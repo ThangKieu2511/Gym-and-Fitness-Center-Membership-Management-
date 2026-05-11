@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QPixmap
 from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QComboBox,
@@ -210,7 +210,10 @@ class MemberPage(QWidget):
     def _build_header(self) -> QHBoxLayout:
         hdr = QHBoxLayout()
 
-        icon_lbl = QLabel("🏋️")
+        hdr.setSpacing(2)
+        icon_lbl = QLabel()
+        pixmap = QPixmap("gym_pic.png")
+        icon_lbl.setPixmap(pixmap.scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         icon_lbl.setObjectName("pageIcon")
 
         title = QLabel("Quản Lý Hội Viên")

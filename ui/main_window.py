@@ -5,6 +5,7 @@ ui/main_window.py  —  Phase 11  (QR background service — single camera)
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QFrame, QHBoxLayout, QLabel, QMainWindow, QPushButton,
     QSizePolicy, QStackedWidget, QVBoxLayout, QWidget,
@@ -69,8 +70,11 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(14, 20, 14, 20)
         layout.setSpacing(4)
 
-        brand_icon = QLabel("🏋️")
+        brand_icon = QLabel()
+        pixmap = QPixmap("gym_pic.png")
+        brand_icon.setPixmap(pixmap.scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         brand_icon.setObjectName("pageIcon")
+        
         app_name = QLabel("GymTK")
         app_name.setObjectName("appName")
         tagline = QLabel("Quản Lý Phòng Tập")
@@ -79,8 +83,10 @@ class MainWindow(QMainWindow):
         brand_text.setSpacing(0)
         brand_text.addWidget(app_name)
         brand_text.addWidget(tagline)
+
         brand_row = QHBoxLayout()
-        brand_row.setSpacing(10)
+        brand_row.setSpacing(2)
+
         brand_row.addWidget(brand_icon)
         brand_row.addLayout(brand_text)
         brand_row.addStretch()

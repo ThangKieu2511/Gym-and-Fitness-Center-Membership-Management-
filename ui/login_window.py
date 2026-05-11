@@ -5,12 +5,12 @@ ui/login_window.py — Login Window for GymTK
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, QEvent,QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QFont, QColor, QPixmap
 from PySide6.QtWidgets import (
     QLabel, QLineEdit, QMessageBox, QPushButton,
     QVBoxLayout, QHBoxLayout, QWidget, QFrame,
     QGraphicsDropShadowEffect, QApplication
 )
-from PySide6.QtGui import QFont, QColor
 
 from database import Database
 
@@ -42,10 +42,11 @@ class LoginWindow(QWidget):
         h_layout.setAlignment(Qt.AlignCenter)
         h_layout.setSpacing(4)
 
-        icon = QLabel("🏋️")
+        icon = QLabel()
+        pixmap = QPixmap("gym_pic.png")
+        icon.setPixmap(pixmap.scaled(90, 90, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         icon.setAttribute(Qt.WA_TranslucentBackground)
         icon.setAlignment(Qt.AlignCenter)
-        icon.setFont(QFont("Segoe UI", 40))
 
         title = QLabel("GymTK")
         title.setAttribute(Qt.WA_TranslucentBackground)
