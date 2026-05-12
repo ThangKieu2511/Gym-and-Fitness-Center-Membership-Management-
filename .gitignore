@@ -6,3 +6,5 @@ images/members/
 
 *.db
 *.sqlite
+
+__pycache__/
