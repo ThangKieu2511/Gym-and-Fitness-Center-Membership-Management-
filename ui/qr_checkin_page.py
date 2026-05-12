@@ -311,8 +311,8 @@ class _QRCheckinPageImpl(QWidget):
             result.get("image_path", ""),
             result.get("member_name", ""),
         )
-        # Auto clear sau 5 giây
-        self._clear_member_timer.start(5000)
+        # Auto clear sau 2 giây
+        self._clear_member_timer.start(2000)
 
         # Tạm ẩn live feed 3 giây để xem kết quả
         if self._live_preview_active:
@@ -341,6 +341,7 @@ class _QRCheckinPageImpl(QWidget):
             f"📸  Chế độ chụp ảnh{name_display} — Bấm nút Chụp Ảnh để lưu.",
             "valid",
         )
+
 
     # ── Slots từ QRService ────────────────────────────────────────────── #
 
@@ -416,7 +417,15 @@ class _QRCheckinPageImpl(QWidget):
         name = member["name"] if member else "Hội viên"
 
         self._show_member_photo(save_path, name)
-        self._set_result(f"✅  Đã chụp và lưu ảnh cho {name}", "valid")
+        self._set_result(f"✅  Đã chụp và lưu ảnh cho {name}", "valid") 
+
+        # --- PHẦN THÊM MỚI ĐỂ RESET TIMER ---
+        # Tự động clear ảnh hội viên trên UI sau 2 giây
+        self._clear_member_timer.start(2000)
+        
+        # Reset lại dòng thông báo trạng thái bên dưới sau 3 giây (nếu đang bật live)
+        if self._live_preview_active:
+            self._result_timer.start(3000)
 
     # ── Internal helpers ──────────────────────────────────────────────── #
 
