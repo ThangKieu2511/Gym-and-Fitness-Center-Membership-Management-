@@ -592,3 +592,61 @@ QFrame#statusCard {
 #statusResultLabel[status="no_subscription"] { color: #ef4444; }
 #statusResultLabel[status="error"] { color: #ef4444; }
 #statusResultLabel[status="default"] { color: #94a3b8; }
+
+/* ═══════════════════════════════════════════════════════════════════════ */
+/* Xem Ảnh — Button & Dialog                                            */
+/* ═══════════════════════════════════════════════════════════════════════ */
+
+/* Nút "🖼️ Xem Ảnh" — tông tím/indigo phân biệt với btnSecondary */
+#btnViewImage {
+    background-color: #1e1b3a;
+    color: #a78bfa;
+    border: 1px solid #3730a3;
+    border-radius: 7px;
+    padding: 0 14px;
+    font-weight: 650;
+}
+#btnViewImage:hover {
+    background-color: #2d2a52;
+    color: #c4b5fd;
+    border-color: #4f46e5;
+}
+#btnViewImage:pressed {
+    background-color: #1e1b3a;
+    color: #7c3aed;
+}
+#btnViewImage:disabled {
+    color: #374151;
+    border-color: #1e2535;
+    background-color: transparent;
+}
+
+/* Dialog xem ảnh */
+#imageViewDialog {
+    background-color: #161b27;
+}
+
+/* Tên hội viên trong dialog xem ảnh */
+#imageViewMemberName {
+    font-size: 15px;
+    font-weight: 700;
+    color: #a78bfa;
+    letter-spacing: 0.3px;
+    padding: 4px 0 8px 0;
+}
+
+/* Vùng hiển thị ảnh */
+#imageViewLabel {
+    background-color: #0f1117;
+    border: 2px solid #2d3748;
+    border-radius: 10px;
+}
+
+/* Trạng thái không có / không đọc được ảnh */
+#imageViewLabelEmpty {
+    background-color: #0f1117;
+    border: 2px dashed #374151;
+    border-radius: 10px;
+    color: #64748b;
+    font-size: 13px;
+}

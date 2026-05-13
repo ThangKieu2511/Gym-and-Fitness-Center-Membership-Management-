@@ -1,11 +1,11 @@
 """
-ui/member_page.py  —  Phase 10
+ui/member_page.py  —  Phase 10 + Xem Ảnh
 
 Thay đổi so với Phase 10:
-  • Thêm nút "📸 Chụp Ảnh" vào toolbar — chụp 1 frame từ camera, lưu vào
-    images/members/{member_id}.jpg rồi cập nhật image_path trong DB.
-  • MemberDialog vẫn giữ nguyên — không thay đổi.
-  • _sync_buttons() đồng bộ thêm btn_photo.
+  • Thêm nút "🖼️  Xem Ảnh" nằm giữa "📷 Tạo QR" và "📸 Chụp Ảnh".
+  • Thêm ImageViewDialog — dialog tối hiện đại xem ảnh hội viên.
+  • _selected_member() trả thêm image_path từ DB.
+  • _sync_buttons() đồng bộ thêm btn_view_image.
 """
 
 from __future__ import annotations
@@ -51,6 +51,97 @@ SEARCH_DEBOUNCE_MS = 300
 
 # Thư mục lưu ảnh member
 MEMBER_IMAGE_DIR = os.path.join("images", "members")
+
+
+# ══════════════════════════════════════════════════════════════════════════ #
+#  ImageViewDialog — Dialog xem ảnh hội viên                               #
+# ══════════════════════════════════════════════════════════════════════════ #
+
+class ImageViewDialog(QDialog):
+    """
+    Dialog tối hiện đại để xem ảnh hội viên.
+    Hiển thị tên hội viên, ảnh giữ tỉ lệ fit trong vùng hiển thị.
+    """
+
+    def __init__(
+        self,
+        parent: QWidget | None = None,
+        member_name: str = "",
+        image_path: str = "",
+    ) -> None:
+        super().__init__(parent)
+        self._member_name = member_name
+        self._image_path  = image_path
+        self._setup_ui()
+
+    def _setup_ui(self) -> None:
+        self.setWindowTitle("Ảnh Hội Viên")
+        self.setMinimumSize(520, 560)
+        self.setModal(True)
+        self.setObjectName("imageViewDialog")
+
+        # Title
+        title_lbl = QLabel("🖼️   Ảnh Hội Viên")
+        title_lbl.setObjectName("dialogTitle")
+
+        divider = QFrame()
+        divider.setFrameShape(QFrame.HLine)
+        divider.setObjectName("divider")
+
+        # Tên hội viên
+        name_lbl = QLabel(self._member_name)
+        name_lbl.setObjectName("imageViewMemberName")
+        name_lbl.setAlignment(Qt.AlignCenter)
+
+        # Vùng hiển thị ảnh
+        self._img_lbl = QLabel()
+        self._img_lbl.setObjectName("imageViewLabel")
+        self._img_lbl.setAlignment(Qt.AlignCenter)
+        self._img_lbl.setMinimumSize(460, 400)
+        self._img_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        self._load_image()
+
+        # Nút đóng
+        btn_close = QPushButton("✕   Đóng")
+        btn_close.setObjectName("btnNeutral")
+        btn_close.setCursor(Qt.PointingHandCursor)
+        btn_close.setMinimumHeight(40)
+        btn_close.clicked.connect(self.accept)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_row.addWidget(btn_close)
+
+        root = QVBoxLayout(self)
+        root.setSpacing(14)
+        root.setContentsMargins(24, 20, 24, 20)
+        root.addWidget(title_lbl)
+        root.addWidget(divider)
+        root.addWidget(name_lbl)
+        root.addWidget(self._img_lbl, stretch=1)
+        root.addLayout(btn_row)
+
+    def _load_image(self) -> None:
+        """Tải ảnh an toàn — không crash nếu path không tồn tại."""
+        if not self._image_path or not os.path.isfile(self._image_path):
+            self._img_lbl.setText("⚠️  Không tìm thấy file ảnh.")
+            self._img_lbl.setObjectName("imageViewLabelEmpty")
+            return
+
+        pixmap = QPixmap(self._image_path)
+        if pixmap.isNull():
+            self._img_lbl.setText("⚠️  Không thể đọc file ảnh.")
+            self._img_lbl.setObjectName("imageViewLabelEmpty")
+            return
+
+        # Scale giữ tỉ lệ, fit vào vùng hiển thị
+        scaled = pixmap.scaled(
+            460, 400,
+            Qt.KeepAspectRatio,
+            Qt.SmoothTransformation,
+        )
+        self._img_lbl.setPixmap(scaled)
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
@@ -158,7 +249,7 @@ class MemberPage(QWidget):
     """
 
     data_changed = Signal()
-    # ── THAY ĐỔI: signal truyền thêm member_name để QRCheckinPage hiển thị ── #
+    # signal truyền thêm member_name để QRCheckinPage hiển thị
     capture_photo_requested = Signal(int, str)  # (member_id, member_name)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -236,23 +327,26 @@ class MemberPage(QWidget):
         bar = QHBoxLayout()
         bar.setSpacing(8)
 
-        self.btn_add     = self._make_btn("➕  Thêm Hội Viên", "btnPrimary")
-        self.btn_edit    = self._make_btn("✏️  Chỉnh Sửa",     "btnSecondary")
-        self.btn_delete  = self._make_btn("🗑️  Xóa",           "btnDanger")
-        self.btn_qr      = self._make_btn("📷  Tạo QR",        "btnSecondary")
-        self.btn_photo   = self._make_btn("📸  Chụp Ảnh",      "btnSecondary")   # ← NEW
-        self.btn_refresh = self._make_btn("🔄  Làm Mới",       "btnNeutral")
+        self.btn_add        = self._make_btn("➕  Thêm Hội Viên", "btnPrimary")
+        self.btn_edit       = self._make_btn("✏️  Chỉnh Sửa",     "btnSecondary")
+        self.btn_delete     = self._make_btn("🗑️  Xóa",           "btnDanger")
+        self.btn_qr         = self._make_btn("📷  Tạo QR",        "btnSecondary")
+        self.btn_view_image = self._make_btn("🖼️  Xem Ảnh",       "btnViewImage")   # ← NEW
+        self.btn_photo      = self._make_btn("📸  Chụp Ảnh",      "btnSecondary")
+        self.btn_refresh    = self._make_btn("🔄  Làm Mới",       "btnNeutral")
 
         self.btn_edit.setEnabled(False)
         self.btn_delete.setEnabled(False)
         self.btn_qr.setEnabled(False)
-        self.btn_photo.setEnabled(False)   # ← NEW: tắt khi chưa chọn hàng
+        self.btn_view_image.setEnabled(False)   # ← NEW: tắt khi chưa chọn hàng
+        self.btn_photo.setEnabled(False)
 
         bar.addWidget(self.btn_add)
         bar.addWidget(self.btn_edit)
         bar.addWidget(self.btn_delete)
         bar.addWidget(self.btn_qr)
-        bar.addWidget(self.btn_photo)      # ← NEW
+        bar.addWidget(self.btn_view_image)      # ← NEW: nằm giữa Tạo QR và Chụp Ảnh
+        bar.addWidget(self.btn_photo)
         bar.addStretch()
         bar.addWidget(self.btn_refresh)
 
@@ -260,7 +354,8 @@ class MemberPage(QWidget):
         self.btn_edit.clicked.connect(self.open_edit_dialog)
         self.btn_delete.clicked.connect(self.confirm_delete)
         self.btn_qr.clicked.connect(self._on_generate_qr)
-        self.btn_photo.clicked.connect(self._on_capture_photo)    # ← NEW
+        self.btn_view_image.clicked.connect(self._on_view_image)   # ← NEW
+        self.btn_photo.clicked.connect(self._on_capture_photo)
         self.btn_refresh.clicked.connect(self._on_refresh)
 
         return bar
@@ -297,9 +392,9 @@ class MemberPage(QWidget):
         tbl.setSelectionMode(QTableWidget.SingleSelection)
         tbl.setEditTriggers(QTableWidget.NoEditTriggers)
         tbl.setAlternatingRowColors(True)
-       
+
         tbl.verticalHeader().setVisible(False)
-        tbl.verticalHeader().setDefaultSectionSize(50) # Premium row height
+        tbl.verticalHeader().setDefaultSectionSize(50)  # Premium row height
         tbl.setSortingEnabled(True)
         tbl.setShowGrid(False)
 
@@ -348,7 +443,7 @@ class MemberPage(QWidget):
 
             real_id = m.get("id")
             display_id = str(real_id).zfill(3) if real_id else ""
-            
+
             self._set_cell(row_idx, COL_ID, display_id, Qt.AlignCenter, real_id=real_id)
             self._set_cell(row_idx, COL_NAME, m.get("name", ""), Qt.AlignCenter)
             self._set_cell(row_idx, COL_PHONE, m.get("phone", ""), Qt.AlignCenter)
@@ -556,7 +651,40 @@ class MemberPage(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(qr_path))
 
     # ══════════════════════════════════════════════════════════════════ #
-    #  Chụp Ảnh  (Phase 10 — UPDATED: emit signal thay vì chụp trực tiếp) #
+    #  Xem Ảnh  ← NEW                                                   #
+    # ══════════════════════════════════════════════════════════════════ #
+
+    @Slot()
+    def _on_view_image(self) -> None:
+        """
+        Slot xử lý nút "🖼️  Xem Ảnh":
+          - Nếu hội viên có image_path hợp lệ → mở ImageViewDialog.
+          - Nếu chưa có ảnh → thông báo QMessageBox.
+        """
+        member = self._selected_member()
+        if member is None:
+            QMessageBox.information(
+                self, "Chưa Chọn",
+                "Vui lòng chọn một hội viên trong bảng để xem ảnh."
+            )
+            return
+
+        image_path  = member.get("image_path", "") or ""
+        member_name = member["name"]
+
+        # Kiểm tra có ảnh không
+        if not image_path or not os.path.isfile(image_path):
+            QMessageBox.information(
+                self, "Không Có Ảnh",
+                "Hội viên này chưa có ảnh."
+            )
+            return
+
+        dlg = ImageViewDialog(self, member_name=member_name, image_path=image_path)
+        dlg.exec()
+
+    # ══════════════════════════════════════════════════════════════════ #
+    #  Chụp Ảnh  (Phase 10 — emit signal thay vì chụp trực tiếp)       #
     # ══════════════════════════════════════════════════════════════════ #
 
     @Slot()
@@ -585,13 +713,28 @@ class MemberPage(QWidget):
         if not rows:
             return None
         row = rows[0].row()
+
+        member_id = self.table.item(row, COL_ID).data(Qt.UserRole)
+
+        # Lấy image_path từ DB để phục vụ tính năng Xem Ảnh
+        image_path = ""
+        try:
+            db_member = self._db.get_member(member_id) # <-- SỬA THÀNH get_member
+            if db_member:
+                image_path = db_member.get("image_path", "") or ""
+        except Exception as e:
+            # Bạn nên in lỗi ra console để sau này có lỗi khác thì dễ phát hiện hơn
+            print(f"Lỗi khi lấy ảnh từ DB: {e}")
+            image_path = ""
+
         return {
-            "id":        self.table.item(row, COL_ID).data(Qt.UserRole),
-            "name":      self.table.item(row, COL_NAME).text(),
-            "phone":     self.table.item(row, COL_PHONE).text(),
-            "email":     self.table.item(row, COL_EMAIL).text(),
-            "gender":    self.table.item(row, COL_GENDER).text(),
-            "join_date": self.table.item(row, COL_JOIN).text(),
+            "id":         member_id,
+            "name":       self.table.item(row, COL_NAME).text(),
+            "phone":      self.table.item(row, COL_PHONE).text(),
+            "email":      self.table.item(row, COL_EMAIL).text(),
+            "gender":     self.table.item(row, COL_GENDER).text(),
+            "join_date":  self.table.item(row, COL_JOIN).text(),
+            "image_path": image_path,
         }
 
     @Slot()
@@ -604,4 +747,5 @@ class MemberPage(QWidget):
         self.btn_edit.setEnabled(has_sel)
         self.btn_delete.setEnabled(has_sel)
         self.btn_qr.setEnabled(has_sel)
-        self.btn_photo.setEnabled(has_sel)    # ← NEW
+        self.btn_view_image.setEnabled(has_sel)   # ← NEW
+        self.btn_photo.setEnabled(has_sel)
