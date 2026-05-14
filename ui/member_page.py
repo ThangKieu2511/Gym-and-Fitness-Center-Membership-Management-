@@ -104,9 +104,9 @@ class ImageViewDialog(QDialog):
 
         # Nút đóng
         btn_close = QPushButton("✕   Đóng")
-        btn_close.setObjectName("btnNeutral")
+        btn_close.setObjectName("btnCloseImage")
         btn_close.setCursor(Qt.PointingHandCursor)
-        btn_close.setMinimumHeight(40)
+        btn_close.setMinimumHeight(35)
         btn_close.clicked.connect(self.accept)
 
         btn_row = QHBoxLayout()

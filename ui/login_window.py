@@ -40,7 +40,7 @@ class LoginWindow(QWidget):
         header.setFixedHeight(140)
         h_layout = QVBoxLayout(header)
         h_layout.setAlignment(Qt.AlignCenter)
-        h_layout.setSpacing(4)
+        h_layout.setSpacing(2)
 
         icon = QLabel()
         pixmap = QPixmap("gym_pic.png")

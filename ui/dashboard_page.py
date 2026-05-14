@@ -20,17 +20,24 @@ from matplotlib.figure import Figure
 
 from datetime import date
 
+import pandas as pd
+from openpyxl import load_workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+
 from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -240,11 +247,11 @@ class MemberHistoryPanel(QWidget):
         self._table = _make_table(self.HEADERS)
         hdr = self._table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        
+
         # Mở rộng cột thời gian check-in tối đa
         hdr.setSectionResizeMode(1, QHeaderView.Stretch)
         hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        
+
         layout.addWidget(self._table)
 
     def populate_members(self, members: list[dict]) -> None:
@@ -263,7 +270,7 @@ class MemberHistoryPanel(QWidget):
             r = self._table.rowCount()
             self._table.insertRow(r)
             _cell(self._table, r, 0, str(i + 1), Qt.AlignCenter)
-            
+
             # Căn trái thời gian check-in để dễ nhìn hơn khi cột được kéo rộng
             _cell(self._table, r, 1, row.get("checkin_time", ""), Qt.AlignLeft | Qt.AlignVCenter)
 
@@ -379,14 +386,12 @@ class ChartDialog(QDialog):
             ax.text(0.5, 0.5, "Không có dữ liệu", ha="center", va="center", transform=ax.transAxes, fontsize=11)
             ax.axis("off")
         else:
-            # Sửa phần lấy names tại đây:
             names = []
             for r in rows:
                 full_name = r.get("member_name", "").strip()
-                # Cắt chuỗi theo khoảng trắng và lấy từ cuối cùng (Tên)
                 short_name = full_name.split()[-1] if full_name else ""
                 names.append(short_name)
-                
+
             days  = [r.get("days_count", 0)   for r in rows]
             ax.bar(names, days)
             ax.set_title("Top 5 hội viên tháng này", fontsize=11, pad=8)
@@ -431,14 +436,14 @@ class DashboardPage(QWidget):
         mid_row.setSpacing(16)
 
         self._today_table = TodayDetailTable()
-        mid_row.addWidget(self._today_table, stretch=1) # Chia đều diện tích
+        mid_row.addWidget(self._today_table, stretch=1)
 
         self._top_table = TopMembersTable()
-        mid_row.addWidget(self._top_table, stretch=1) # Chia đều diện tích
+        mid_row.addWidget(self._top_table, stretch=1)
 
         body_layout.addLayout(mid_row, stretch=1)
 
-        # ── 3. Member history (đẩy lên cao hơn và chiếm không gian cân đối) ──
+        # ── 3. Member history ──
         self._history_panel = MemberHistoryPanel()
         self._history_panel._combo.currentIndexChanged.connect(self._on_history_member_changed)
         body_layout.addWidget(self._history_panel, stretch=1)
@@ -471,6 +476,13 @@ class DashboardPage(QWidget):
         hdr.addWidget(icon)
         hdr.addLayout(text_col)
         hdr.addStretch()
+
+        btn_export = QPushButton("📊  Xuất Báo Cáo")
+        btn_export.setObjectName("btnNeutral")
+        btn_export.setMinimumHeight(34)
+        btn_export.setCursor(Qt.PointingHandCursor)
+        btn_export.clicked.connect(self._export_excel_report)
+        hdr.addWidget(btn_export)
 
         btn_chart = QPushButton("📈  Xem Biểu Đồ")
         btn_chart.setObjectName("btnNeutral")
@@ -578,3 +590,276 @@ class DashboardPage(QWidget):
     @Slot()
     def _on_history_member_changed(self) -> None:
         self._load_member_history()
+
+    # ── Xuất báo cáo Excel ──────────────────────────────────────────────── #
+
+    @Slot()
+    def _export_excel_report(self) -> None:
+        """Mở QFileDialog để chọn vị trí lưu, rồi xuất báo cáo Excel 2 sheet."""
+        today_str = date.today().strftime("%Y-%m-%d")
+        default_name = f"BaoCao_GymTK_{today_str}.xlsx"
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Lưu Báo Cáo Excel",
+            default_name,
+            "Excel Files (*.xlsx);;All Files (*)",
+        )
+
+        if not file_path:
+            return  # Người dùng huỷ
+
+        if not file_path.endswith(".xlsx"):
+            file_path += ".xlsx"
+
+        try:
+            self._status_lbl.setText("⏳  Đang xuất báo cáo...")
+            self._write_excel_report(file_path)
+            self._status_lbl.setText(f"✅  Đã xuất báo cáo: {file_path}")
+            QMessageBox.information(
+                self,
+                "Xuất Báo Cáo Thành Công",
+                f"Báo cáo đã được lưu tại:\n{file_path}",
+            )
+        except Exception as exc:
+            self._status_lbl.setText(f"❌  Lỗi xuất báo cáo: {exc}")
+            QMessageBox.critical(
+                self,
+                "Lỗi Xuất Báo Cáo",
+                f"Không thể xuất báo cáo:\n{exc}",
+            )
+
+    def _write_excel_report(self, file_path: str) -> None:
+        """Tạo file Excel với 2 sheet: Doanh Thu Tháng + Hội Viên Sắp Hết Hạn."""
+        revenue_rows  = self._ctrl.get_month_revenue_detail()
+        expiring_rows = self._ctrl.get_expiring_members(days_ahead=7)
+
+        month_str = date.today().strftime("%m/%Y")
+
+        # ── Sheet 1: Doanh Thu Tháng ──────────────────────────────────── #
+        df_revenue = pd.DataFrame(
+            revenue_rows,
+            columns=["member_name", "plan_name", "price", "start_date"],
+        ) if revenue_rows else pd.DataFrame(
+            columns=["member_name", "plan_name", "price", "start_date"]
+        )
+        df_revenue.rename(columns={
+            "member_name": "Họ Tên Hội Viên",
+            "plan_name":   "Loại Gói",
+            "price":       "Giá Tiền (VNĐ)",
+            "start_date":  "Ngày Đăng Ký",
+        }, inplace=True)
+
+        # ── Sheet 2: Hội Viên Sắp Hết Hạn ────────────────────────────── #
+        df_expiring = pd.DataFrame(
+            expiring_rows,
+            columns=["member_name", "phone", "end_date", "days_left"],
+        ) if expiring_rows else pd.DataFrame(
+            columns=["member_name", "phone", "end_date", "days_left"]
+        )
+        df_expiring.rename(columns={
+            "member_name": "Họ Tên",
+            "phone":       "Số Điện Thoại",
+            "end_date":    "Ngày Hết Hạn",
+            "days_left":   "Số Ngày Còn Lại",
+        }, inplace=True)
+
+        # ── Ghi ra file Excel với pandas ──────────────────────────────── #
+        with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+            df_revenue.to_excel(
+                writer,
+                sheet_name="Doanh Thu Tháng",
+                index=False,
+                startrow=2,       # Dành dòng 1–2 cho tiêu đề
+            )
+            df_expiring.to_excel(
+                writer,
+                sheet_name="Hội Viên Sắp Hết Hạn",
+                index=False,
+                startrow=2,
+            )
+
+        # ── Định dạng với openpyxl ────────────────────────────────────── #
+        wb = load_workbook(file_path)
+        self._format_sheet_revenue(wb["Doanh Thu Tháng"],  df_revenue,  month_str)
+        self._format_sheet_expiring(wb["Hội Viên Sắp Hết Hạn"], df_expiring, month_str)
+        wb.save(file_path)
+
+    # ── Helpers định dạng Excel ─────────────────────────────────────────── #
+
+    @staticmethod
+    def _header_style() -> tuple:
+        """Trả về (Font, PatternFill, Alignment) cho dòng tiêu đề cột."""
+        font  = Font(name="Arial", bold=True, color="FFFFFF", size=11)
+        fill  = PatternFill("solid", start_color="1E3A5F")
+        align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        return font, fill, align
+
+    @staticmethod
+    def _title_style() -> tuple:
+        """Trả về (Font, PatternFill, Alignment) cho dòng tiêu đề sheet."""
+        font  = Font(name="Arial", bold=True, color="FFFFFF", size=13)
+        fill  = PatternFill("solid", start_color="2563EB")
+        align = Alignment(horizontal="center", vertical="center")
+        return font, fill, align
+
+    @staticmethod
+    def _thin_border() -> Border:
+        thin = Side(style="thin", color="D1D5DB")
+        return Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    def _format_sheet_revenue(
+        self,
+        ws,
+        df: pd.DataFrame,
+        month_str: str,
+    ) -> None:
+        num_cols = len(df.columns)
+
+        # ── Dòng tiêu đề sheet (row 1) ──
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
+        title_cell = ws.cell(row=1, column=1, value=f"BÁO CÁO DOANH THU THÁNG {month_str}")
+        t_font, t_fill, t_align = self._title_style()
+        title_cell.font      = t_font
+        title_cell.fill      = t_fill
+        title_cell.alignment = t_align
+        ws.row_dimensions[1].height = 28
+
+        # ── Dòng header cột (row 3, vì startrow=2 → pandas viết header ở row 3) ──
+        h_font, h_fill, h_align = self._header_style()
+        border = self._thin_border()
+        header_row = 3
+        for col_idx in range(1, num_cols + 1):
+            cell = ws.cell(row=header_row, column=col_idx)
+            cell.font      = h_font
+            cell.fill      = h_fill
+            cell.alignment = h_align
+            cell.border    = border
+        ws.row_dimensions[header_row].height = 22
+
+        # ── Dữ liệu ──
+        data_start = header_row + 1
+        data_end   = data_start + len(df) - 1
+
+        # Màu xen kẽ cho dòng dữ liệu
+        fill_even = PatternFill("solid", start_color="EFF6FF")
+        fill_odd  = PatternFill("solid", start_color="FFFFFF")
+        align_center = Alignment(horizontal="center", vertical="center")
+        align_left   = Alignment(horizontal="left",   vertical="center")
+        align_right  = Alignment(horizontal="right",  vertical="center")
+
+        price_col_idx = 3  # Cột "Giá Tiền (VNĐ)"
+
+        for row_idx in range(data_start, data_end + 1):
+            row_fill = fill_even if (row_idx % 2 == 0) else fill_odd
+            for col_idx in range(1, num_cols + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.fill   = row_fill
+                cell.border = border
+                if col_idx == price_col_idx:
+                    cell.alignment  = align_right
+                    cell.number_format = '#,##0'
+                elif col_idx == num_cols:
+                    cell.alignment = align_center
+                else:
+                    cell.alignment = align_left
+            ws.row_dimensions[row_idx].height = 18
+
+        # ── Dòng tổng cộng ──
+        if len(df) > 0:
+            total_row = data_end + 1
+            ws.merge_cells(
+                start_row=total_row, start_column=1,
+                end_row=total_row,   end_column=price_col_idx - 1,
+            )
+            total_label = ws.cell(row=total_row, column=1, value="TỔNG CỘNG")
+            total_label.font      = Font(name="Arial", bold=True, size=11)
+            total_label.alignment = Alignment(horizontal="right", vertical="center")
+            total_label.border    = border
+
+            total_val = ws.cell(
+                row=total_row, column=price_col_idx,
+                value=f"=SUM({get_column_letter(price_col_idx)}{data_start}:{get_column_letter(price_col_idx)}{data_end})",
+            )
+            total_val.font         = Font(name="Arial", bold=True, size=11, color="1D4ED8")
+            total_val.alignment    = align_right
+            total_val.number_format = '#,##0'
+            total_val.border       = border
+            ws.row_dimensions[total_row].height = 20
+
+        # ── Độ rộng cột ──
+        col_widths = [28, 22, 18, 16]
+        for idx, width in enumerate(col_widths[:num_cols], start=1):
+            ws.column_dimensions[get_column_letter(idx)].width = width
+
+    def _format_sheet_expiring(
+        self,
+        ws,
+        df: pd.DataFrame,
+        month_str: str,
+    ) -> None:
+        num_cols = len(df.columns)
+
+        # ── Tiêu đề sheet (row 1) ──
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
+        title_cell = ws.cell(row=1, column=1, value="HỘI VIÊN SẮP HẾT HẠN (TRONG 7 NGÀY TỚI)")
+        t_font, t_fill, t_align = self._title_style()
+        title_cell.font      = t_font
+        title_cell.fill      = t_fill
+        title_cell.alignment = t_align
+        ws.row_dimensions[1].height = 28
+
+        # ── Header cột (row 3) ──
+        h_font, h_fill, h_align = self._header_style()
+        border = self._thin_border()
+        header_row = 3
+        for col_idx in range(1, num_cols + 1):
+            cell = ws.cell(row=header_row, column=col_idx)
+            cell.font      = h_font
+            cell.fill      = h_fill
+            cell.alignment = h_align
+            cell.border    = border
+        ws.row_dimensions[header_row].height = 22
+
+        # ── Dữ liệu ──
+        data_start = header_row + 1
+        data_end   = data_start + len(df) - 1
+
+        fill_even    = PatternFill("solid", start_color="FFF7ED")
+        fill_urgent  = PatternFill("solid", start_color="FEE2E2")   # ≤ 2 ngày: đỏ nhạt
+        fill_warning = PatternFill("solid", start_color="FEF9C3")   # 3–5 ngày: vàng nhạt
+        fill_odd     = PatternFill("solid", start_color="FFFFFF")
+        align_center = Alignment(horizontal="center", vertical="center")
+        align_left   = Alignment(horizontal="left",   vertical="center")
+
+        days_left_col = 4  # Cột "Số Ngày Còn Lại"
+
+        for row_idx in range(data_start, data_end + 1):
+            days_cell = ws.cell(row=row_idx, column=days_left_col)
+            try:
+                days_val = int(days_cell.value) if days_cell.value is not None else 99
+            except (ValueError, TypeError):
+                days_val = 99
+
+            if days_val <= 2:
+                row_fill = fill_urgent
+            elif days_val <= 5:
+                row_fill = fill_warning
+            elif row_idx % 2 == 0:
+                row_fill = fill_even
+            else:
+                row_fill = fill_odd
+
+            for col_idx in range(1, num_cols + 1):
+                cell = ws.cell(row=row_idx, column=col_idx)
+                cell.fill   = row_fill
+                cell.border = border
+                cell.alignment = align_center if col_idx in (3, 4) else align_left
+                if col_idx == days_left_col and days_val <= 2:
+                    cell.font = Font(name="Arial", bold=True, color="DC2626", size=10)
+            ws.row_dimensions[row_idx].height = 18
+
+        # ── Độ rộng cột ──
+        col_widths = [28, 18, 16, 18]
+        for idx, width in enumerate(col_widths[:num_cols], start=1):
+            ws.column_dimensions[get_column_letter(idx)].width = width

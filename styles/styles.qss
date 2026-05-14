@@ -650,3 +650,23 @@ QFrame#statusCard {
     color: #64748b;
     font-size: 13px;
 }
+
+/* ── Nút Đóng (ImageViewDialog) ── */
+#btnCloseImage {
+    background-color: transparent;
+    color: #ef4444; /* Màu đỏ mờ nhạt */
+    border: 1px solid #3b1f1f;
+    border-radius: 7px;
+    padding: 0 14px;
+    font-weight: 600;
+}
+
+#btnCloseImage:hover { 
+    background-color: #7f1d1d; /* Đỏ đậm khi di chuột vào */
+    color: #fca5a5;
+    border-color: #991b1b;
+}
+
+#btnCloseImage:pressed {
+    background-color: #991b1b;
+}
