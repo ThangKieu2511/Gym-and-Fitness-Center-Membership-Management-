@@ -8,3 +8,13 @@ images/members/
 *.sqlite
 
 __pycache__/
+
+# Loại bỏ tất cả các file Excel báo cáo
+BaoCao_*.xlsx
+Bao_Cao_*.xlsx
+
+# Hoặc an toàn hơn, loại bỏ tất cả file .xlsx sinh ra trong quá trình chạy app
+*.xlsx
+
+# Loại bỏ các file tạm thời mà Excel tự sinh ra khi mở file (thường bắt đầu bằng ~$)
+~$*.xlsx
