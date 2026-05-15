@@ -12,32 +12,33 @@
 ## ✨ Tính năng chính
 
 ### 1. Dashboard & Thống kê
-* **Tổng quan:** Hiển thị nhanh các chỉ số quan trọng (Tổng hội viên, Doanh thu tháng, Lượt tập hôm nay).
-* **Biểu đồ trực quan:** Tích hợp Matplotlib để vẽ biểu đồ Donut (tỷ lệ gói tập) và biểu đồ cột (Top 5 hội viên năng nổ nhất).
-* **Báo cáo:** Xuất danh sách hội viên sắp hết hạn ra file Excel với định dạng chuyên nghiệp.
+* **Tổng quan**: Hiển thị nhanh các chỉ số quan trọng như tổng hội viên, doanh thu tháng và lượt tập hôm nay.
+* **Biểu đồ trực quan**: Tích hợp Matplotlib để vẽ biểu đồ Donut và biểu đồ cột.
+* **Báo cáo**: Xuất danh sách hội viên sắp hết hạn ra file Excel với định dạng chuyên nghiệp.
 
 ### 2. Quản lý Hội viên (Member Management)
-* **CRUD đầy đủ:** Thêm mới, cập nhật thông tin và xóa hội viên.
-* **Hồ sơ hình ảnh:** Chụp ảnh trực tiếp từ Webcam hoặc tải ảnh lên để nhận diện hội viên.
-* **Tìm kiếm thông minh:** Sử dụng kỹ thuật *Debounce Search* để tìm kiếm mượt mà, giảm tải cho Database.
+* **CRUD đầy đủ**: Thêm mới, cập nhật thông tin và xóa hội viên.
+* **Hồ sơ hình ảnh**: Chụp ảnh trực tiếp từ Webcam để nhận diện hội viên.
+* **Tìm kiếm thông minh**: Sử dụng kỹ thuật *Debounce Search* để tìm kiếm mượt mà.
 
 ### 3. Hệ thống Gói tập (Subscriptions)
-* Quản lý các loại gói tập (Học sinh/Sinh viên, Người lớn).
-* Tự động tính toán ngày bắt đầu và ngày kết thúc.
+* Quản lý các loại gói tập linh hoạt (Học sinh/Sinh viên, Người lớn).
+* Tự động tính toán ngày bắt đầu và ngày kết thúc dựa trên gói tập.
 * Theo dõi trạng thái gói tập (Còn hạn/Hết hạn) theo thời gian thực.
 
 ### 4. QR Check-in tự động
-* **Background Scanning:** Hệ thống quét QR chạy ngầm liên tục, người dùng không cần thao tác thủ công.
-* **Nhận diện nhanh:** Tự động truy xuất thông tin hội viên ngay khi phát hiện mã QR hợp lệ.
+* **Background Scanning**: Hệ thống quét QR chạy ngầm liên tục qua QRService.
+* **Nhận diện nhanh**: Tự động truy xuất thông tin hội viên ngay khi phát hiện mã QR hợp lệ.
+
 ---
 
 ## 🛠 Công nghệ sử dụng
 
-* **Ngôn ngữ:** Python
-* **Giao diện (GUI):** PySide6 (Qt for Python)
-* **Cơ sở dữ liệu:** SQLite (truy vấn qua SQL thuần)
-* **Thị giác máy tính:** OpenCV & PyZbar
-* **Xử lý dữ liệu & Báo cáo:** Matplotlib, Pandas, Openpyxl
+* **Ngôn ngữ**: Python
+* **Giao diện (GUI)**: PySide6 (Qt for Python)
+* **Cơ sở dữ liệu**: SQLite (truy vấn qua SQL thuần)
+* **Thị giác máy tính**: OpenCV & PyZbar
+* **Xử lý dữ liệu & Báo cáo**: Matplotlib, Pandas, Openpyxl
 
 ---
 
@@ -51,13 +52,12 @@ GymTK/
 │   ├── member_controller.py
 │   ├── qr_controller.py
 │   └── subscription_controller.py
-├── images/                   # Lưu trữ hình ảnh hội viên
-│   └── members/              # (1.jpg, 3.jpg, ...)
-├── qr_codes/                 # Lưu trữ mã QR định danh hội viên đã tạo
-│   └── (member_1.png, ...)
+├── images/
+│   └── members/              # Lưu trữ hình ảnh hội viên (1.jpg, 3.jpg...)
+├── qr_codes/                 # Lưu trữ mã QR định danh hội viên
 ├── services/                 # Các dịch vụ xử lý nền
 │   └── qr_service.py         # Quản lý luồng camera và nhận diện mã QR
-├── styles/                   # Chứa file định nghĩa giao diện
+├── styles/                   
 │   └── styles.qss            # Stylesheet định dạng giao diện ứng dụng
 ├── ui/                       # Giao diện người dùng (PySide6)
 │   ├── chart_widget.py       # Thành phần biểu đồ thống kê
@@ -68,27 +68,36 @@ GymTK/
 │   ├── qr_checkin_page.py    # Trang thực hiện check-in qua camera
 │   └── subscription_page.py  # Quản lý đăng ký gói tập
 ├── utils/                    # Các công cụ hỗ trợ bổ trợ
-├── .gitignore                # Cấu hình bỏ qua các file rác khi đẩy lên GitHub
+│   └── qr_generator.py       # File hỗ trợ tạo mã QR
+├── .gitignore                # Cấu hình bỏ qua các file rác Git
 ├── database.py               # Kết nối và thao tác với SQLite
 ├── gym.db                    # File cơ sở dữ liệu SQLite
-├── gym_pic.png               # Logo/Hình ảnh thương hiệu ứng dụng
+├── gym_pic.png               # Hình ảnh thương hiệu/Logo ứng dụng
 ├── main.py                   # Điểm khởi chạy chính (Entry Point)
-└── README.md                 # Tài liệu hướng dẫn dự án
-
-
+├── README.md                 # Tài liệu hướng dẫn dự án
+└── requirements.txt          # Danh sách thư viện cần cài đặt
+```
 ## 🚀 Cài đặt và Chạy thử
 
-* **Cài đặt thư viện:** Mở Terminal tại thư mục dự án và chạy lệnh sau để cài đặt toàn bộ các thư viện cần thiết:
-  ```bash
-  pip install -r requirements.txt#```
+* **Bước 1**: Cài đặt thư viện
+Mở Terminal tại thư mục dự án và chạy lệnh sau:
+```text
+    pip install -r requirements.txt
+```
+
+* **Bước 2**: Khởi chạy ứng dụng
+Sau khi cài đặt xong, chạy phần mềm bằng lệnh:
+```text
+    python main.py
+```
 
 ## 👤 Thông tin tác giả
+* **Họ tên**: Kiều Quốc Thắng
+* **MSSV**: 25AI051
+* **Lớp**: 25GAI
 
-* **Họ tên:** Kiều Quốc Thắng
-* **MSSV:** 25AI051
-* **Lớp:** 25GAI
-* **Đồ án:** Lập trình Python cuối kỳ
-* **Đề tài:** 9. Gym and Fitness Center Membership Management (Phần mềm quản lý phòng Gym)
+* **Đồ án**: Lập trình Python cuối kỳ
 
-> **Cam kết:** Dự án được thực hiện 100% về tính nguyên bản và tuân thủ các yêu cầu kỹ thuật của bài cuối kỳ.
+* **Đề tài**: 9. Gym and Fitness Center Membership Management (Phần mềm quản lý phòng Gym)
 
+* **Cam kết**: Dự án được thực hiện 100% về tính nguyên bản và tuân thủ các yêu cầu kỹ thuật của bài cuối kỳ.
