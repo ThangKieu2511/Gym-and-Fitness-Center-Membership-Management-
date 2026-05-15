@@ -75,20 +75,20 @@ GymTK/
 ├── main.py                   # Điểm khởi chạy chính (Entry Point)
 └── README.md                 # Tài liệu hướng dẫn dự án
 
----
 
 ## 🚀 Cài đặt và Chạy thử
 
-1. **Cài đặt các thư viện cần thiết:**
-   ```bash
-   pip install PySide6 opencv-python pyzbar matplotlib pandas openpyxl
+* **Cài đặt thư viện:** Mở Terminal tại thư mục dự án và chạy lệnh sau để cài đặt toàn bộ các thư viện cần thiết:
+  ```bash
+  pip install -r requirements.txt#```
 
-👤 Thông tin tác giả
-Họ tên: Kiều Quốc Thắng
+## 👤 Thông tin tác giả
 
-MSSV: 25AI051
+* **Họ tên:** Kiều Quốc Thắng
+* **MSSV:** 25AI051
+* **Lớp:** 25GAI
+* **Đồ án:** Lập trình Python cuối kỳ
+* **Đề tài:** 9. Gym and Fitness Center Membership Management (Phần mềm quản lý phòng Gym)
 
-Lớp: 25GAI
+> **Cam kết:** Dự án được thực hiện 100% về tính nguyên bản và tuân thủ các yêu cầu kỹ thuật của bài cuối kỳ.
 
-Đồ án: Lập trình Python cuối kỳ - Đề tài: 9. Gym and Fitness Center Membership Management.(Phần mềm quản lý phòng Gym).
-Dự án được cam kết 100% về tính nguyên bản và tuân thủ các yêu cầu kỹ thuật của bài cuối kỳ.
