@@ -19,7 +19,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
 from datetime import date
-
+from ui.chart_widget import PieChartWidget, BarChartWidget
 import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -304,6 +304,10 @@ class MemberHistoryPanel(QWidget):
 #  ChartDialog  — popup riêng chứa Pie + Bar chart                           #
 # ══════════════════════════════════════════════════════════════════════════ #
 
+# ══════════════════════════════════════════════════════════════════════════ #
+#  ChartDialog  — popup riêng chứa Pie + Bar chart                           #
+# ══════════════════════════════════════════════════════════════════════════ #
+
 class ChartDialog(QDialog):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -326,34 +330,17 @@ class ChartDialog(QDialog):
         charts_row = QHBoxLayout()
         charts_row.setSpacing(24)
 
-        pie_col = QVBoxLayout()
-        pie_col.setSpacing(6)
-        pie_lbl = QLabel("🥧  Tỷ Lệ Check-in")
-        pie_lbl.setObjectName("sectionTitle")
-        pie_col.addWidget(pie_lbl)
-
-        self._pie_figure = Figure(figsize=(4.5, 3.5), tight_layout=True)
-        self._pie_canvas = FigureCanvas(self._pie_figure)
-        self._pie_canvas.setMinimumSize(380, 300)
-        pie_col.addWidget(self._pie_canvas)
-        charts_row.addLayout(pie_col, stretch=1)
+        # ── SỬ DỤNG TRỰC TIẾP WIDGET ĐÃ CÓ TỪ CHART_WIDGET.PY ──
+        self._pie_widget = PieChartWidget()
+        charts_row.addWidget(self._pie_widget, stretch=1)
 
         vline = QFrame()
         vline.setFrameShape(QFrame.VLine)
         vline.setObjectName("sidebarDivider")
         charts_row.addWidget(vline)
 
-        bar_col = QVBoxLayout()
-        bar_col.setSpacing(6)
-        bar_lbl = QLabel("📊  Top 5 Hội Viên — Số Ngày Đi Tập")
-        bar_lbl.setObjectName("sectionTitle")
-        bar_col.addWidget(bar_lbl)
-
-        self._bar_figure = Figure(figsize=(5, 3.5), tight_layout=True)
-        self._bar_canvas = FigureCanvas(self._bar_figure)
-        self._bar_canvas.setMinimumSize(420, 300)
-        bar_col.addWidget(self._bar_canvas)
-        charts_row.addLayout(bar_col, stretch=1)
+        self._bar_widget = BarChartWidget()
+        charts_row.addWidget(self._bar_widget, stretch=1)
 
         root.addLayout(charts_row)
 
@@ -362,41 +349,11 @@ class ChartDialog(QDialog):
         root.addWidget(btn_box, alignment=Qt.AlignRight)
 
     def load_data(self, checkin_status: dict, top_members: list[dict]) -> None:
-        self._draw_pie(checkin_status)
-        self._draw_bar(top_members)
+        # Đẩy dữ liệu thẳng vào 2 widget để chúng tự vẽ UI hiện đại
+        self._pie_widget.update_chart(checkin_status)
+        self._bar_widget.update_chart(top_members)
 
-    def _draw_pie(self, stats: dict) -> None:
-        valid   = stats.get("valid", 0)
-        expired = stats.get("expired", 0)
-        self._pie_figure.clear()
-        ax = self._pie_figure.add_subplot(111)
-        total = valid + expired
-        if total == 0:
-            ax.text(0.5, 0.5, "Không có dữ liệu", ha="center", va="center", transform=ax.transAxes, fontsize=11)
-            ax.axis("off")
-        else:
-            ax.pie([valid, expired], labels=[f"Hợp lệ\n{valid}", f"Hết hạn\n{expired}"], autopct="%1.1f%%", startangle=90)
-            ax.set_title("Check-in theo trạng thái", fontsize=11, pad=8)
-        self._pie_canvas.draw()
-
-    def _draw_bar(self, rows: list[dict]) -> None:
-        self._bar_figure.clear()
-        ax = self._bar_figure.add_subplot(111)
-        if not rows:
-            ax.text(0.5, 0.5, "Không có dữ liệu", ha="center", va="center", transform=ax.transAxes, fontsize=11)
-            ax.axis("off")
-        else:
-            names = []
-            for r in rows:
-                full_name = r.get("member_name", "").strip()
-                short_name = full_name.split()[-1] if full_name else ""
-                names.append(short_name)
-
-            days  = [r.get("days_count", 0)   for r in rows]
-            ax.bar(names, days)
-            ax.set_title("Top 5 hội viên tháng này", fontsize=11, pad=8)
-        self._bar_canvas.draw()
-
+    # (Đã xóa hàm _draw_pie và _draw_bar cũ ở đây vì không cần thiết nữa)
 
 # ══════════════════════════════════════════════════════════════════════════ #
 #  DashboardPage                                                              #
