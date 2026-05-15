@@ -1,0 +1,15 @@
+# Giao diện người dùng (GUI Framework)
+PySide6
+
+# Xử lý hình ảnh và Camera nền
+opencv-python
+
+# Nhận diện và giải mã QR Code
+pyzbar
+
+# Vẽ biểu đồ thống kê (Donut, Bar chart)
+matplotlib
+
+# Xử lý dữ liệu và xuất báo cáo Excel
+pandas
+openpyxl
