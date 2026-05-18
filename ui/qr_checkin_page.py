@@ -17,6 +17,8 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import Qt, QTimer, Slot
+from PySide6.QtMultimedia import QSoundEffect
+from PySide6.QtCore import QUrl
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -47,6 +49,12 @@ STATUS_ICONS = {
     "no_subscription": "❌",
     "error":           "❌",
 }
+
+# ── Đường dẫn thư mục assets âm thanh ───────────────────────────────────── #
+_UI_DIR     = os.path.dirname(os.path.abspath(__file__))
+_ASSETS_DIR = os.path.join(_UI_DIR, "..", "assets")
+_SFX_SUCCESS = os.path.join(_ASSETS_DIR, "success.wav")
+_SFX_ERROR   = os.path.join(_ASSETS_DIR, "error.wav")
 
 
 # ══════════════════════════════════════════════════════════════════════════ #
@@ -117,7 +125,27 @@ class _QRCheckinPageImpl(QWidget):
         self._clear_member_timer = QTimer(self)
         self._clear_member_timer.setSingleShot(True)
         self._clear_member_timer.timeout.connect(self._clear_member_photo)
+        self._setup_sound_effects()
         self._setup_ui()
+
+    # ── Sound Effects ────────────────────────────────────────────────── #
+
+    def _setup_sound_effects(self) -> None:
+        """Khởi tạo QSoundEffect cho success và error."""
+        self._sfx_success = QSoundEffect(self)
+        self._sfx_success.setSource(QUrl.fromLocalFile(os.path.abspath(_SFX_SUCCESS)))
+        self._sfx_success.setVolume(0.8)
+
+        self._sfx_error = QSoundEffect(self)
+        self._sfx_error.setSource(QUrl.fromLocalFile(os.path.abspath(_SFX_ERROR)))
+        self._sfx_error.setVolume(0.8)
+
+    def _play_sound(self, status: str) -> None:
+        """Phát âm thanh tương ứng với trạng thái check-in."""
+        if status == "valid":
+            self._sfx_success.play()
+        else:
+            self._sfx_error.play()
 
     # ── Inject QRService ─────────────────────────────────────────────── #
 
@@ -303,6 +331,7 @@ class _QRCheckinPageImpl(QWidget):
         """
         Được QRService / main_window gọi khi có kết quả check-in.
         Hiển thị message + đổi màu/icon + ảnh member theo result.
+        Phát âm thanh tương ứng với trạng thái check-in.
         """
         status  = result.get("status", "error")
         message = result.get("message", "Lỗi không xác định.")
@@ -311,6 +340,9 @@ class _QRCheckinPageImpl(QWidget):
             result.get("image_path", ""),
             result.get("member_name", ""),
         )
+        # Phát âm thanh thông báo
+        self._play_sound(status)
+
         # Auto clear sau 2 giây
         self._clear_member_timer.start(2000)
 
@@ -417,12 +449,11 @@ class _QRCheckinPageImpl(QWidget):
         name = member["name"] if member else "Hội viên"
 
         self._show_member_photo(save_path, name)
-        self._set_result(f"✅  Đã chụp và lưu ảnh cho {name}", "valid") 
+        self._set_result(f"✅  Đã chụp và lưu ảnh cho {name}", "valid")
 
-        # --- PHẦN THÊM MỚI ĐỂ RESET TIMER ---
         # Tự động clear ảnh hội viên trên UI sau 2 giây
         self._clear_member_timer.start(2000)
-        
+
         # Reset lại dòng thông báo trạng thái bên dưới sau 3 giây (nếu đang bật live)
         if self._live_preview_active:
             self._result_timer.start(3000)

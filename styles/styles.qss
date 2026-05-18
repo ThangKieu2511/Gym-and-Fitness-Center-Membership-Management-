@@ -156,7 +156,7 @@ QTableWidget {
     selection-color: #e2e8f0;
     outline: none;
     padding: 4px;
-    selection-behavior: select-rows;
+    
 }
 
 QTableWidget::item {

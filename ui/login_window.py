@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt, QEvent,QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QFont, QColor, QPixmap
+import os
 from PySide6.QtWidgets import (
     QLabel, QLineEdit, QMessageBox, QPushButton,
     QVBoxLayout, QHBoxLayout, QWidget, QFrame,
@@ -24,7 +25,7 @@ class LoginWindow(QWidget):
         self._db = Database()
         self._main_window = None
         self._setup_ui()
-        self._apply_style()
+        
         self._start_animations()
 
     # ── UI ───────────────────────────────────────────────────────────── #
@@ -152,13 +153,7 @@ class LoginWindow(QWidget):
             self._password_input.setEchoMode(QLineEdit.Password)
             self._toggle_pass_btn.setText("👁️")
 
-    def _apply_style(self):
-        try:
-            with open("styles.qss", "r", encoding="utf-8") as f:
-                self.setStyleSheet(f.read())
-        except Exception as e:
-            print(f"Không thể tải file styles.qss: {e}")
-
+    
     def _start_animations(self):
         self._fade_anim = QPropertyAnimation(self._card, b"windowOpacity")
         self._fade_anim.setDuration(500)

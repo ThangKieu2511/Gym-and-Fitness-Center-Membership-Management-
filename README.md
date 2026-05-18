@@ -46,6 +46,9 @@
 
 ```text
 GymTK/
+├── assets/                  
+│   ├── error.wav            # Error beep sound (expired subscription / unregistered member)
+│   └── success.wav          # Short beep sound (successful check-in)
 ├── controllers/              # Business logic handling
 │   ├── checkin_controller.py
 │   ├── dashboard_controller.py
@@ -53,13 +56,13 @@ GymTK/
 │   ├── qr_controller.py
 │   └── subscription_controller.py
 ├── images/
-│   └── members/              # Member images storage (1.jpg, 3.jpg...)
+│   └── members/              # Member profile images storage (1.jpg, 3.jpg...)
 ├── qr_codes/                 # Member identification QR codes storage
 ├── services/                 # Background services
 │   └── qr_service.py         # Manages camera stream and QR recognition
 ├── styles/                   
 │   └── styles.qss            # Application UI stylesheet
-├── ui/                       # User Interface (PySide6)
+├── ui/                       # User Interface components (PySide6)
 │   ├── chart_widget.py       # Statistical chart component
 │   ├── dashboard_page.py     # General overview page
 │   ├── login_window.py       # System login window
@@ -70,14 +73,14 @@ GymTK/
 ├── utils/                    # Auxiliary tools
 │   └── qr_generator.py       # QR code generation helper
 ├── .gitignore                # Git ignore configuration
-├── database.py               # SQLite connection and operations
+├── database.py               # SQLite connection and database operations
 ├── gym.db                    # SQLite database file
-├── gym_pic.png               # Application brand/Logo image
-├── main.py                   # Main Entry Point
+├── gym_pic.png               # Application brand logo image
+├── main.py                   # Main Entry Point of the application
 ├── README.md                 # Project documentation
 └── requirements.txt          # List of dependencies to install
 ```
-## 🚀 Cài đặt và Chạy thử
+## 🚀 Setup and Test
 
 * **Step 1**: Install libraries
 Open the Terminal at the project folder and run the following command:
