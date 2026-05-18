@@ -5,99 +5,99 @@
 ![SQLite](https://img.shields.io/badge/Database-SQLite-lightgrey.svg)
 ![OpenCV](https://img.shields.io/badge/Feature-QR_Checkin-orange.svg)
 
-**GymTK** là ứng dụng quản lý phòng gym hiện đại, được xây dựng bằng Python và PySide6. Ứng dụng hỗ trợ quản lý hội viên, đăng ký gói tập và tự động hóa quy trình check-in thông qua công nghệ quét mã QR thời gian thực.
+**GymTK** is a modern gym management application built with Python and PySide6. The application supports member management, subscription registration, and automates the check-in process through real-time QR code scanning technology.
 
 ---
 
-## ✨ Tính năng chính
+## ✨ Key Features
 
-### 1. Dashboard & Thống kê
-* **Tổng quan**: Hiển thị nhanh các chỉ số quan trọng như tổng hội viên, doanh thu tháng và lượt tập hôm nay.
-* **Biểu đồ trực quan**: Tích hợp Matplotlib để vẽ biểu đồ Donut và biểu đồ cột.
-* **Báo cáo**: Xuất danh sách hội viên sắp hết hạn ra file Excel với định dạng chuyên nghiệp.
+### 1. Dashboard & Statistics
+* **Overview**: Provides a quick glance at key metrics such as total members, monthly revenue, and today's check-ins.
+* **Visual Charts**: Integrates Matplotlib to draw Donut charts and Bar charts.
+* **Reports**: Exports a list of members with expiring memberships to an Excel file with professional formatting.
 
-### 2. Quản lý Hội viên (Member Management)
-* **CRUD đầy đủ**: Thêm mới, cập nhật thông tin và xóa hội viên.
-* **Hồ sơ hình ảnh**: Chụp ảnh trực tiếp từ Webcam để nhận diện hội viên.
-* **Tìm kiếm thông minh**: Sử dụng kỹ thuật *Debounce Search* để tìm kiếm mượt mà.
+### 2. Member Management
+* **Full CRUD**: Add new, update information, and delete members.
+* **Image Profile**: Captures photos directly from the Webcam for member identification.
+* **Smart Search**: Uses *Debounce Search* technique for smooth searching.
 
-### 3. Hệ thống Gói tập (Subscriptions)
-* Quản lý các loại gói tập linh hoạt (Học sinh/Sinh viên, Người lớn).
-* Tự động tính toán ngày bắt đầu và ngày kết thúc dựa trên gói tập.
-* Theo dõi trạng thái gói tập (Còn hạn/Hết hạn) theo thời gian thực.
+### 3. Subscription System
+* Manages flexible subscription types (Students, Adults).
+* Automatically calculates start and end dates based on the subscription package.
+* Tracks subscription status (Active/Expired) in real-time.
 
-### 4. QR Check-in tự động
-* **Background Scanning**: Hệ thống quét QR chạy ngầm liên tục qua QRService.
-* **Nhận diện nhanh**: Tự động truy xuất thông tin hội viên ngay khi phát hiện mã QR hợp lệ.
-
----
-
-## 🛠 Công nghệ sử dụng
-
-* **Ngôn ngữ**: Python
-* **Giao diện (GUI)**: PySide6 (Qt for Python)
-* **Cơ sở dữ liệu**: SQLite (truy vấn qua SQL thuần)
-* **Thị giác máy tính**: OpenCV & PyZbar
-* **Xử lý dữ liệu & Báo cáo**: Matplotlib, Pandas, Openpyxl
+### 4. Automated QR Check-in
+* **Background Scanning**: The QR scanning system runs continuously in the background via QRService.
+* **Fast Recognition**: Automatically retrieves member information as soon as a valid QR code is detected.
 
 ---
 
-## 📂 Cấu trúc thư mục
+## 🛠 Technologies Used
+
+* **Language**: Python
+* **GUI**: PySide6 (Qt for Python)
+* **Database**: SQLite (raw SQL queries)
+* **Computer Vision**: OpenCV & PyZbar
+* **Data Processing & Reporting**: Matplotlib, Pandas, Openpyxl
+
+---
+
+## 📂 Directory Structure
 
 ```text
 GymTK/
-├── controllers/              # Xử lý logic nghiệp vụ (Business Logic)
+├── controllers/              # Business logic handling
 │   ├── checkin_controller.py
 │   ├── dashboard_controller.py
 │   ├── member_controller.py
 │   ├── qr_controller.py
 │   └── subscription_controller.py
 ├── images/
-│   └── members/              # Lưu trữ hình ảnh hội viên (1.jpg, 3.jpg...)
-├── qr_codes/                 # Lưu trữ mã QR định danh hội viên
-├── services/                 # Các dịch vụ xử lý nền
-│   └── qr_service.py         # Quản lý luồng camera và nhận diện mã QR
+│   └── members/              # Member images storage (1.jpg, 3.jpg...)
+├── qr_codes/                 # Member identification QR codes storage
+├── services/                 # Background services
+│   └── qr_service.py         # Manages camera stream and QR recognition
 ├── styles/                   
-│   └── styles.qss            # Stylesheet định dạng giao diện ứng dụng
-├── ui/                       # Giao diện người dùng (PySide6)
-│   ├── chart_widget.py       # Thành phần biểu đồ thống kê
-│   ├── dashboard_page.py     # Trang thống kê tổng quan
-│   ├── login_window.py       # Cửa sổ đăng nhập hệ thống
-│   ├── main_window.py        # Cửa sổ chính điều hướng ứng dụng
-│   ├── member_page.py        # Quản lý danh sách hội viên
-│   ├── qr_checkin_page.py    # Trang thực hiện check-in qua camera
-│   └── subscription_page.py  # Quản lý đăng ký gói tập
-├── utils/                    # Các công cụ hỗ trợ bổ trợ
-│   └── qr_generator.py       # File hỗ trợ tạo mã QR
-├── .gitignore                # Cấu hình bỏ qua các file rác Git
-├── database.py               # Kết nối và thao tác với SQLite
-├── gym.db                    # File cơ sở dữ liệu SQLite
-├── gym_pic.png               # Hình ảnh thương hiệu/Logo ứng dụng
-├── main.py                   # Điểm khởi chạy chính (Entry Point)
-├── README.md                 # Tài liệu hướng dẫn dự án
-└── requirements.txt          # Danh sách thư viện cần cài đặt
+│   └── styles.qss            # Application UI stylesheet
+├── ui/                       # User Interface (PySide6)
+│   ├── chart_widget.py       # Statistical chart component
+│   ├── dashboard_page.py     # General overview page
+│   ├── login_window.py       # System login window
+│   ├── main_window.py        # Main application navigation window
+│   ├── member_page.py        # Member list management
+│   ├── qr_checkin_page.py    # Camera check-in page
+│   └── subscription_page.py  # Subscription package management
+├── utils/                    # Auxiliary tools
+│   └── qr_generator.py       # QR code generation helper
+├── .gitignore                # Git ignore configuration
+├── database.py               # SQLite connection and operations
+├── gym.db                    # SQLite database file
+├── gym_pic.png               # Application brand/Logo image
+├── main.py                   # Main Entry Point
+├── README.md                 # Project documentation
+└── requirements.txt          # List of dependencies to install
 ```
 ## 🚀 Cài đặt và Chạy thử
 
-* **Bước 1**: Cài đặt thư viện
-Mở Terminal tại thư mục dự án và chạy lệnh sau:
+* **Step 1**: Install libraries
+Open the Terminal at the project folder and run the following command:
 ```text
     pip install -r requirements.txt
 ```
 
-* **Bước 2**: Khởi chạy ứng dụng
-Sau khi cài đặt xong, chạy phần mềm bằng lệnh:
+* **Step 2**: Run the application
+After the installation is complete, launch the software using the command:
 ```text
     python main.py
 ```
 
 ## 👤 Thông tin tác giả
-* **Họ tên**: Kiều Quốc Thắng
-* **MSSV**: 25AI051
-* **Lớp**: 25GAI
+* **Full Name**: Kiều Quốc Thắng
+* **Student ID**: 25AI051
+* **Class**: 25GAI
 
-* **Đồ án**: Lập trình Python cuối kỳ
+* **Project**: Final Python Programming Project
 
-* **Đề tài**: 9. Gym and Fitness Center Membership Management (Phần mềm quản lý phòng Gym)
+* **Topic**: 9. Gym and Fitness Center Membership Management
 
-* **Cam kết**: Dự án được thực hiện 100% về tính nguyên bản và tuân thủ các yêu cầu kỹ thuật của bài cuối kỳ.
+* **Commitment**: The project is 100% original and complies with the technical requirements of the final assignment.
