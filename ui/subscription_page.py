@@ -5,12 +5,15 @@ Thay đổi so với Phase 7:
   • _on_checkin() giờ gọi CheckinController.checkin() trực tiếp
     thay vì SubscriptionController.checkin() (đã bị xoá)
   • Import thêm CheckinController
+  • Tích hợp âm thanh ăn mừng khi Đăng ký mới / Gia hạn gói thành công bằng os path
 """
 
 from __future__ import annotations
+import os
 from datetime import date, timedelta
 
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot, QUrl
+from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QComboBox,
@@ -56,6 +59,11 @@ PLAN_LABELS: dict[str, str] = {
 PLAN_KEYS  = list(PLAN_CONFIG.keys())
 CTYPE_KEYS = list(PRICE_PER_MONTH.keys())
 
+# ── Đường dẫn thư mục assets âm thanh chuẩn hóa tuyệt đối bằng os ────────── #
+_UI_DIR        = os.path.dirname(os.path.abspath(__file__))
+_ASSETS_DIR    = os.path.normpath(os.path.join(_UI_DIR, "..", "assets"))
+_SFX_CELEBRATE = os.path.join(_ASSETS_DIR, "celebrate.wav")
+
 
 # ══════════════════════════════════════════════════════════════════════════ #
 #  PreviewCard                                                               #
@@ -95,14 +103,12 @@ class PreviewCard(QFrame):
         lbl_k = QLabel(label_text)
         lbl_k.setObjectName("previewKey")
         lbl_k.setMinimumWidth(130)
-        # Nới lỏng chiều cao tối thiểu để có không gian cho các chữ như g, y
         lbl_k.setMinimumHeight(28) 
         lbl_k.setStyleSheet("padding-bottom: 2px;") 
         lbl_k.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
 
         lbl_v = QLabel("—")
         lbl_v.setObjectName("previewValue")
-        # Nới lỏng chiều cao tối thiểu
         lbl_v.setMinimumHeight(28)
         lbl_v.setStyleSheet("padding-bottom: 2px;")
         lbl_v.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
@@ -138,8 +144,15 @@ class RegistrationPanel(QWidget):
         super().__init__(parent)
         self._controller         = SubscriptionController()
         self._checkin_controller = CheckinController()
+        self._setup_sound_effects()
         self._setup_ui()
         self._refresh_members()
+
+    def _setup_sound_effects(self) -> None:
+        """Khởi tạo QSoundEffect cho âm thanh ăn mừng giao dịch."""
+        self._sfx_celebrate = QSoundEffect(self)
+        self._sfx_celebrate.setSource(QUrl.fromLocalFile(_SFX_CELEBRATE))
+        self._sfx_celebrate.setVolume(1.0)
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -290,6 +303,7 @@ class RegistrationPanel(QWidget):
                 f"Thao tác này sẽ <b>gia hạn</b> thêm {preview['total_months']} tháng."
             )
 
+        # ĐÃ ĐƯA RA NGOÀI KHỐI IF ACTIVE: Đảm bảo biến reply luôn được khởi tạo
         reply = QMessageBox.question(
             self,
             "Xác Nhận Đăng Ký",
@@ -315,6 +329,7 @@ class RegistrationPanel(QWidget):
             self, "✅  Thành Công",
             f"Đã xử lý gói <b>{plan_label}</b> cho <b>{member_name}</b>!",
         )
+        self._sfx_celebrate.play()  # Phát âm thanh ăn mừng thành công
         self.subscription_created.emit(member_id, plan_type, ctype)
 
     @Slot()
@@ -368,6 +383,7 @@ class RegistrationPanel(QWidget):
             f"Đã gia hạn gói cho <b>{member_name}</b>.<br>"
             f"Ngày kết thúc mới: <b>{new_end}</b>",
         )
+        self._sfx_celebrate.play()  # Phát âm thanh ăn mừng thành công
         self.subscription_extended.emit(member_id)
 
     @Slot()
@@ -504,7 +520,6 @@ class SubscriptionTable(QWidget):
                 btn = QPushButton("🚫 Huỷ")
                 btn.setObjectName("btnDanger")
                 
-                # --- NỚI RỘNG CHIỀU CAO VÀ PADDING ĐỂ KHÔNG CẮT CHỮ 'Y' ---
                 btn.setFixedSize(80, 32)  
                 btn.setStyleSheet("padding: 4px 8px;") 
                 
@@ -526,7 +541,6 @@ class SubscriptionTable(QWidget):
             else:
                 self._table.setCellWidget(row_idx, COL_ACTION, None)
             
-            # Tăng nhẹ chiều cao hàng để bao trọn nút mới
             self._table.setRowHeight(row_idx, 48)
         self._table.setSortingEnabled(True)
         count = len(subs)

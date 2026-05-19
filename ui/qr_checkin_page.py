@@ -134,11 +134,11 @@ class _QRCheckinPageImpl(QWidget):
         """Khởi tạo QSoundEffect cho success và error."""
         self._sfx_success = QSoundEffect(self)
         self._sfx_success.setSource(QUrl.fromLocalFile(os.path.abspath(_SFX_SUCCESS)))
-        self._sfx_success.setVolume(0.8)
+        self._sfx_success.setVolume(1)
 
         self._sfx_error = QSoundEffect(self)
         self._sfx_error.setSource(QUrl.fromLocalFile(os.path.abspath(_SFX_ERROR)))
-        self._sfx_error.setVolume(0.8)
+        self._sfx_error.setVolume(1)
 
     def _play_sound(self, status: str) -> None:
         """Phát âm thanh tương ứng với trạng thái check-in."""
