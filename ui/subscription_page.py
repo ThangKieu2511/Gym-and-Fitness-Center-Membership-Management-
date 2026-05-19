@@ -313,7 +313,7 @@ class RegistrationPanel(QWidget):
             f"<b>Giá:</b> {preview['price']:,.0f} đ<br>"
             f"<b>Kết thúc:</b> {preview['end_date']}"
             f"{extra_msg}<br><br>Xác nhận?",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,       
             QMessageBox.Yes,
         )
         if reply != QMessageBox.Yes:
