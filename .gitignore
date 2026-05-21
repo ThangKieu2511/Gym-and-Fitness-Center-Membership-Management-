@@ -18,3 +18,10 @@ Bao_Cao_*.xlsx
 
 # Loại bỏ các file tạm thời mà Excel tự sinh ra khi mở file (thường bắt đầu bằng ~$)
 ~$*.xlsx
+
+
+# --- Dữ liệu hệ thống ---
+*.db
+*.sqlite
+*.sqlite-journal
+backups/

@@ -3,7 +3,8 @@ import bcrypt
 import logging
 from datetime import date, datetime
 from typing import Optional
-
+import os
+import glob
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
@@ -55,6 +56,7 @@ class Database:
         self.create_tables()
         self._migrate()
         self._seed_default_admin()
+        self.backup_database()
 
     # ------------------------------------------------------------------
     # Connection management
@@ -727,3 +729,44 @@ class Database:
             fetch="one",
         )
         return float(row["total"]) if row else 0.0
+    
+    # ------------------------------------------------------------------
+    # Backup management
+    # ------------------------------------------------------------------
+
+    def backup_database(self, backup_dir: str = "backups", keep_last: int = 7) -> None:
+        """
+        Tự động sao lưu database an toàn sử dụng SQLite Backup API.
+        Giữ lại tối đa `keep_last` bản sao lưu gần nhất.
+        """
+        if not self.connection:
+            logger.warning("Không có kết nối DB để backup.")
+            return
+
+        try:
+            # 1. Đảm bảo thư mục backups tồn tại
+            os.makedirs(backup_dir, exist_ok=True)
+            
+            # 2. Tạo tên file theo thời gian thực (VD: gym_backup_20260521_215508.db)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            backup_file = os.path.join(backup_dir, f"gym_backup_{timestamp}.db")
+
+            # 3. Sử dụng API backup chuẩn của SQLite (An toàn, không bị lock DB)
+            bck_conn = sqlite3.connect(backup_file)
+            with bck_conn:
+                self.connection.backup(bck_conn)
+            bck_conn.close()
+
+            logger.info("✅ Đã sao lưu database an toàn: %s", backup_file)
+
+            # 4. Dọn dẹp các bản backup cũ (Chỉ giữ lại keep_last bản)
+            list_of_files = glob.glob(os.path.join(backup_dir, "gym_backup_*.db"))
+            list_of_files.sort(key=os.path.getctime) # Sắp xếp file từ cũ đến mới
+
+            while len(list_of_files) > keep_last:
+                oldest_file = list_of_files.pop(0)
+                os.remove(oldest_file)
+                logger.info("🗑️ Đã xóa bản sao lưu cũ: %s", oldest_file)
+
+        except Exception as exc:
+            logger.exception("❌ Lỗi khi sao lưu database: %s", exc)

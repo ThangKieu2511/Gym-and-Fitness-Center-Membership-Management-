@@ -1,5 +1,5 @@
 """
-ui/login_window.py — Login Window for GymTK
+Login Window for GymTK
 """
 
 from __future__ import annotations
@@ -104,6 +104,7 @@ class LoginWindow(QWidget):
         self._password_input.setEchoMode(QLineEdit.Password)
         self._password_input.setMinimumHeight(42)
         self._password_input.returnPressed.connect(self._do_login)
+        
         # Gắn bộ lắng nghe sự kiện để đổi màu khung viền khi được click
         self._password_input.installEventFilter(self)
 
