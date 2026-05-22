@@ -22,8 +22,8 @@ class LoginWindow(QWidget):
         self.setWindowTitle("GymTK — Đăng Nhập")
         self.setFixedSize(400, 520)
         self.setObjectName("loginWindow")
-        self._db = Database()
-        self._main_window = None
+        self._db = Database()   # Kết nối database ngay khi tạo LoginWindow để sẵn sàng xác thực người dùng  
+        self._main_window = None 
         self._setup_ui()
         
         self._start_animations()
@@ -168,9 +168,11 @@ class LoginWindow(QWidget):
     # ── Logic ─────────────────────────────────────────────────────────── #
 
     def _do_login(self):
+        # Lấy thông tin người dùng nhập vào
         username = self._username_input.text().strip()
         password = self._password_input.text()
 
+        # Kiểm tra nếu có trường nào trống thì hiện cảnh báo và không tiếp tục
         if not username or not password:
             QMessageBox.warning(self, "Thiếu thông tin", "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu.")
             return
@@ -186,6 +188,8 @@ class LoginWindow(QWidget):
         # Refresh UI ngay lập tức
         QApplication.processEvents()
 
+
+        # Kiểm tra thông tin đăng nhập với database
         if self._db.verify_user(username, password):
             self._open_main()
         else:
@@ -216,10 +220,10 @@ class LoginWindow(QWidget):
         if obj == self._password_input:
             if event.type() == QEvent.Type.FocusIn:
                 self._pass_container.setProperty("focused", "true")
-                self._pass_container.style().unpolish(self._pass_container)
-                self._pass_container.style().polish(self._pass_container)
+                self._pass_container.style().unpolish(self._pass_container) # Buộc cập nhật lại style để áp dụng CSS mới khi có thuộc tính "focused"
+                self._pass_container.style().polish(self._pass_container)# Áp dụng lại style sau khi đã thay đổi thuộc tính để trigger hiệu ứng viền sáng lên
             elif event.type() == QEvent.Type.FocusOut:
                 self._pass_container.setProperty("focused", "false")
                 self._pass_container.style().unpolish(self._pass_container)
                 self._pass_container.style().polish(self._pass_container)
-        return super().eventFilter(obj, event)
+        return super().eventFilter(obj, event) # Trả về False để cho phép sự kiện tiếp tục được xử lý bình thường sau khi chúng ta đã can thiệp để thay đổi style khi focus/blur ô password

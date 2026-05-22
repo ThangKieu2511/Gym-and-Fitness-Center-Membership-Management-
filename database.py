@@ -21,7 +21,7 @@ logger = logging.getLogger("GymDB")
 # ---------------------------------------------------------------------------
 
 def _row_to_dict(cursor: sqlite3.Cursor, row: sqlite3.Row) -> dict:
-    """Convert a sqlite3.Row to a plain Python dict."""
+    # Chuyển đổi một sqlite3.Row thành dict sử dụng tên cột từ cursor.description
     return dict(zip([col[0] for col in cursor.description], row))
 
 
@@ -159,6 +159,7 @@ class Database:
             """,
         ]
 
+        
         try:
             with self.connection:
                 for stmt in ddl_statements:
@@ -230,24 +231,25 @@ class Database:
     # ==================================================================
 
     def create_user(self, username: str, password: str) -> int:
-        password_hash = bcrypt.hashpw(
+        password_hash = bcrypt.hashpw(  #Dấu vân tay kĩ thuật số để lưu trữ an toàn mật khẩu, tránh lưu thẳng text
             password.encode("utf-8"),
-            bcrypt.gensalt(),
+            bcrypt.gensalt(),   #Tạo chuỗi kí tự mã hóa ngẫu nhiên để tăng cường bảo mật
         ).decode("utf-8")
-
         row_id = self._execute(
-            "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-            (username, password_hash),
+            "INSERT INTO users (username, password_hash) VALUES (?, ?)", # Thêm người dùng mới
+            (username, password_hash), # Lưu tên đăng nhập và mật khẩu đã được băm vào database
         )
         logger.info("User created: '%s' (id=%s)", username, row_id)
         return row_id
 
+
+    # Lấy thông tin người dùng theo username, trả về dict hoặc None nếu không tìm thấy
     def get_user(self, username: str) -> Optional[dict]:
-        """Fetch a single user record by username."""
+        
         return self._execute(
             "SELECT * FROM users WHERE username = ?",
             (username,),
-            fetch="one",
+            fetch="one", # Chỉ lấy một bản ghi duy nhất, trả về dict hoặc None nếu không tìm thấy
         )
 
     def verify_user(self, username: str, password: str) -> bool:
@@ -255,15 +257,18 @@ class Database:
         if not user:
             logger.warning("Login attempt for unknown user: '%s'", username)
             return False
-        is_valid = bcrypt.checkpw(
+        
+        # Kiểm tra mật khẩu bằng cách so sánh password đã nhập với password_hash trong database
+        is_valid = bcrypt.checkpw(  
             password.encode("utf-8"),
             user["password_hash"].encode("utf-8"),
         )
         logger.info("Login attempt for '%s': %s", username, "OK" if is_valid else "FAILED")
         return is_valid
 
+
     def _seed_default_admin(self) -> None:
-        """Insert the default admin account if it does not already exist."""
+        # Tạo tài khoản admin mặc định nếu chưa tồn tại (username=admin, password=123)
         if not self.get_user(self.DEFAULT_ADMIN_USERNAME):
             self.create_user(self.DEFAULT_ADMIN_USERNAME, self.DEFAULT_ADMIN_PASSWORD)
             logger.info("Default admin account created (username=admin, password=123).")
