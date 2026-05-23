@@ -350,12 +350,18 @@ class MemberPage(QWidget):
         bar.addStretch()
         bar.addWidget(self.btn_refresh)
 
-        self.btn_add.clicked.connect(self.open_add_dialog)
+        self.btn_add.clicked.connect(self.open_add_dialog)  # Kết nối nút bấm với slot mở dialog thêm hội viên
+
         self.btn_edit.clicked.connect(self.open_edit_dialog)
+
         self.btn_delete.clicked.connect(self.confirm_delete)
-        self.btn_qr.clicked.connect(self._on_generate_qr)
+
+        self.btn_qr.clicked.connect(self._on_generate_qr) # Kết nối nút bấm với slot tạo QR cho hội viên đã chọn
+
         self.btn_view_image.clicked.connect(self._on_view_image)   # ← NEW
+
         self.btn_photo.clicked.connect(self._on_capture_photo)
+
         self.btn_refresh.clicked.connect(self._on_refresh)
 
         return bar
@@ -529,14 +535,16 @@ class MemberPage(QWidget):
     #  CRUD Dialogs                                                      #
     # ══════════════════════════════════════════════════════════════════ #
 
+    
     @Slot()
+    # Mở dialog thêm hội viên mới, sau khi thêm thành công sẽ refresh lại bảng và emit data_changed
     def open_add_dialog(self) -> None:
-        dlg = MemberDialog(self)
+        dlg = MemberDialog(self) # dialog trống để nhập thông tin hội viên mới  
         if dlg.exec() != QDialog.Accepted:
             return
-
-        data = dlg.get_data()
+        data = dlg.get_data() # lấy dữ liệu từ ô input 
         try:
+            # Gọi MemberController để thêm hội viên mới vào DB, nếu có lỗi sẽ hiển thị QMessageBox
             self._controller.add_member(
                 data["name"], data["phone"], data["email"], data["gender"]
             )
@@ -618,7 +626,7 @@ class MemberPage(QWidget):
 
     @Slot()
     def _on_generate_qr(self) -> None:
-        member = self._selected_member()
+        member = self._selected_member() # Lấy hội viên đã chọn để tạo QR
         if member is None:
             QMessageBox.information(
                 self, "Chưa Chọn",
@@ -630,7 +638,7 @@ class MemberPage(QWidget):
         member_name = member["name"]
 
         try:
-            qr_path = self._controller.generate_member_qr(member_id)
+            qr_path = self._controller.generate_member_qr(member_id) # Gọi tới MemberController để tạo QR, trả về đường dẫn file QR đã tạo
         except (ValueError, RuntimeError) as exc:
             QMessageBox.critical(self, "❌  Tạo QR Thất Bại", str(exc))
             return
@@ -648,7 +656,7 @@ class MemberPage(QWidget):
         )
 
         if reply == QMessageBox.Yes:
-            QDesktopServices.openUrl(QUrl.fromLocalFile(qr_path))
+            QDesktopServices.openUrl(QUrl.fromLocalFile(qr_path)) # Mở file QR bằng ứng dụng mặc định của hệ điều hành
 
     # ══════════════════════════════════════════════════════════════════ #
     #  Xem Ảnh  ← NEW                                                   #

@@ -15,27 +15,14 @@ from qrcode.image.styledpil import StyledPilImage
 
 
 def generate_qr(data: str, save_path: str) -> None:
-    """
-    Tạo ảnh QR Code từ ``data`` và lưu vào ``save_path`` dưới dạng PNG.
-
-    Parameters
-    ----------
-    data      : Chuỗi nội dung sẽ được mã hoá vào QR (vd: "member:42").
-    save_path : Đường dẫn file đầu ra, bao gồm tên file và đuôi .png.
-
-    Raises
-    ------
-    OSError   : Nếu không thể ghi file (quyền truy cập, đường dẫn sai, …).
-    Exception : Bất kỳ lỗi nào từ thư viện qrcode / Pillow.
-    """
     qr = qrcode.QRCode(
         version=None,           # tự chọn kích thước nhỏ nhất đủ chứa data
         error_correction=qrcode.constants.ERROR_CORRECT_M,
         box_size=10,
         border=4,
     )
-    qr.add_data(data)
-    qr.make(fit=True)
+    qr.add_data(data) # Đưa chuỗi "member:{id}" vào QR code
+    qr.make(fit=True) # Tính toán kích thước QR code
 
-    img = qr.make_image(fill_color="black", back_color="white")
-    img.save(save_path)
+    img = qr.make_image(fill_color="black", back_color="white") #Tạo ảnh QR
+    img.save(save_path) #Lưu file PNG vào đường dẫn đã chỉ định

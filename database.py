@@ -279,6 +279,8 @@ class Database:
     # MEMBERS
     # ==================================================================
 
+
+    # Thêm hội viên mới vào database, trả về id của hội viên vừa tạo
     def add_member(
         self,
         name: str,
@@ -290,7 +292,7 @@ class Database:
         image_path: str = "",
     ) -> int:
         if not join_date:
-            join_date = date.today().isoformat()
+            join_date = date.today().isoformat() # Nếu không có ngày gia nhập, mặc định là ngày hiện tại
 
         row_id = self._execute(
             """
@@ -299,9 +301,11 @@ class Database:
             """,
             (name, phone or None, email or None, gender, join_date, qr_code or None, image_path or None),
         )
-        logger.info("Member added: '%s' (id=%s)", name, row_id)
+        logger.info("Member added: '%s' (id=%s)", name, row_id) # Ghi log thông tin hội viên mới được thêm vào database
         return row_id
 
+
+    # Lấy thông tin hội viên theo id, trả về dict hoặc None nếu không tìm thấy
     def get_member(self, member_id: int) -> Optional[dict]:
         return self._execute(
             "SELECT * FROM members WHERE id = ?",
@@ -331,6 +335,8 @@ class Database:
             return self.search_members(query)
         return self.get_all_members()
 
+
+    # Tìm kiếm hội viên theo tên, số điện thoại hoặc email, trả về list các hội viên khớp (có thể là rỗng nếu không tìm thấy)
     def search_members(self, query: str) -> list[dict]:
         pattern = f"%{query}%"
         return self._execute(
@@ -372,6 +378,7 @@ class Database:
             logger.exception("Error updating member id=%s: %s", member_id, exc)
             raise
 
+    # Xóa hội viên theo id, trả về True nếu xóa thành công, False nếu không tìm thấy hoặc lỗi
     def delete_member(self, member_id: int) -> bool:
         try:
             with self.connection:
@@ -386,6 +393,8 @@ class Database:
             logger.exception("Error deleting member id=%s: %s", member_id, exc)
             raise
 
+
+    # Cập nhập mã QR của hội viên
     def update_member_qr(self, member_id: int, qr_code: str) -> bool:
         try:
             with self.connection:

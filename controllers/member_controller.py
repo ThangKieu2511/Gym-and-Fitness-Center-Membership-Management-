@@ -128,12 +128,15 @@ class MemberController:
         email  = email.strip()
         gender = gender.strip()
 
+
+        # Kiểm tra (Validation) — ném ValueError nếu không hợp lệ
         self._validate(name, email)
 
         try:
-            # qr_code=None → NULL trong SQLite, tránh lỗi UNIQUE khi chưa có QR
+            # Gọi tới Database để thêm hội viên mới, trả về ID tự động
             return self.db.add_member(name, phone, email, gender, qr_code=None)
         except sqlite3.IntegrityError as exc:
+            # Chuyển lỗi trùng lặp thành thông báo dễ hiểu
             raise ValueError(self._integrity_msg(exc)) from exc
         except Exception as exc:
             raise RuntimeError(f"Không thể thêm hội viên: {exc}") from exc
@@ -210,34 +213,10 @@ class MemberController:
     # ------------------------------------------------------------------ #
 
     def generate_member_qr(self, member_id: int) -> str:
-        """
-        Tạo QR Code cho hội viên, lưu PNG vào ``qr_codes/``, cập nhật DB.
-
-        Logic:
-          1. Tạo chuỗi ``qr_data = "member:<id>"``
-          2. Đảm bảo thư mục ``qr_codes/`` tồn tại (tạo nếu chưa có)
-          3. Gọi ``generate_qr(qr_data, path)`` để xuất file PNG
-          4. Ghi ``qr_data`` vào cột ``members.qr_code`` trong DB
-          5. Trả về đường dẫn file PNG
-
-        Nếu QR đã tồn tại → overwrite (không báo lỗi).
-
-        Parameters
-        ----------
-        member_id : ID hội viên cần tạo QR.
-
-        Returns
-        -------
-        str  Đường dẫn tuyệt đối tới file QR PNG vừa tạo.
-
-        Raises
-        ------
-        ValueError   : Nếu không tìm thấy hội viên.
-        RuntimeError : Lỗi ghi file hoặc DB.
-        """
+        
         # ── 1. Kiểm tra hội viên tồn tại ──────────────────────────────── #
         try:
-            existing = self.db.get_member(member_id)
+            existing = self.db.get_member(member_id) # Kiểm tra hội viên tồn tại trong Database, nếu không sẽ trả về None
         except Exception as exc:
             raise RuntimeError(f"Không thể truy vấn hội viên #{member_id}: {exc}") from exc
 
@@ -245,7 +224,7 @@ class MemberController:
             raise ValueError(f"Không tìm thấy hội viên có ID = {member_id}.")
 
         # ── 2. Chuỗi dữ liệu QR theo format Phase 9 ───────────────────── #
-        qr_data = f"member:{member_id}"
+        qr_data = f"member:{member_id}" # Dữ liệu QR sẽ có format "member:{id}" để dễ dàng nhận biết khi quét, có thể mở rộng thêm thông tin khác nếu cần trong tương lai
 
         # ── 3. Đảm bảo thư mục tồn tại ────────────────────────────────── #
         os.makedirs(QR_DIR, exist_ok=True)
@@ -253,7 +232,7 @@ class MemberController:
 
         # ── 4. Tạo file PNG ────────────────────────────────────────────── #
         try:
-            generate_qr(qr_data, file_path)
+            generate_qr(qr_data, file_path) # Gọi hàm ở bên utils/qr_generator.py để tạo file QR PNG
         except Exception as exc:
             raise RuntimeError(f"Không thể tạo file QR: {exc}") from exc
 
