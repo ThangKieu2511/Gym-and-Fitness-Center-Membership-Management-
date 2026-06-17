@@ -230,6 +230,7 @@ class Database:
     # USERS
     # ==================================================================
 
+    # 
     def create_user(self, username: str, password: str) -> int:
         password_hash = bcrypt.hashpw(  #Dấu vân tay kĩ thuật số để lưu trữ an toàn mật khẩu, tránh lưu thẳng text
             password.encode("utf-8"),
@@ -252,6 +253,7 @@ class Database:
             fetch="one", # Chỉ lấy một bản ghi duy nhất, trả về dict hoặc None nếu không tìm thấy
         )
 
+    # Kiểm tra thông tin đăng nhập 
     def verify_user(self, username: str, password: str) -> bool:
         user = self.get_user(username)
         if not user:
@@ -313,6 +315,7 @@ class Database:
             fetch="one",
         )
 
+    # Lấy thông tin của hội viên theo mã QR
     def get_member_by_qr(self, qr_code: str) -> Optional[dict]:
         return self._execute(
             "SELECT * FROM members WHERE qr_code = ?",
@@ -320,6 +323,7 @@ class Database:
             fetch="one",
         )
 
+    # Lấy thông tin tất cả hội viên 
     def get_all_members(self) -> list[dict]:
         return self._execute(
             "SELECT * FROM members ORDER BY name",
@@ -349,6 +353,8 @@ class Database:
             fetch="all",
         )
 
+
+    # Cập nhật thông tin của hội viên
     def update_member(
         self,
         member_id: int,
@@ -410,6 +416,7 @@ class Database:
             logger.exception("Error updating QR for member id=%s: %s", member_id, exc)
             raise
 
+    # Cập nhập ảnh của hội viên
     def update_member_image(self, member_id: int, image_path: str) -> bool:
         """Cập nhật đường dẫn ảnh của hội viên."""
         try:
@@ -430,6 +437,7 @@ class Database:
     # PLANS
     # ==================================================================
 
+    # Thêm gói đăng kí cho hội viên 
     def add_plan(self, name: str, duration: int = 30, price: float = 0.0) -> int:
         row_id = self._execute(
             "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
@@ -492,6 +500,7 @@ class Database:
     # SUBSCRIPTIONS
     # ==================================================================
 
+    # Thêm gói đăng kí cho hội viên 
     def add_subscription(
         self,
         member_id: int,
@@ -537,6 +546,7 @@ class Database:
             fetch="all",
         )
 
+    # Kiểm tra gói có đang còn hiệu lực hay không
     def get_active_subscription(self, member_id: int) -> Optional[dict]:
         today = date.today().isoformat()
         return self._execute(
@@ -554,6 +564,7 @@ class Database:
             fetch="one",
         )
 
+    # Tự động chuyển các gói hết hạn thành Expired
     def expire_outdated_subscriptions(self) -> int:
         today = date.today().isoformat()
         try:
@@ -575,6 +586,7 @@ class Database:
             logger.exception("Error expiring subscriptions: %s", exc)
             raise
 
+    # Hủy gói tập của học viên, chuyển trạng thái thành Cancelled
     def cancel_subscription(self, subscription_id: int) -> bool:
         """Set a subscription's status to ``'cancelled'``."""
         try:
@@ -595,6 +607,7 @@ class Database:
     # CHECK-INS
     # ==================================================================
 
+    # Ghi lại lịch sử check-in của hội viên
     def add_checkin(
         self,
         member_id: int,
@@ -644,6 +657,7 @@ class Database:
             fetch="all",
         )
 
+    # Lấy tất cả check-in của ngày hôm nay
     def get_today_checkins(self) -> list[dict]:
         """Return all check-ins that occurred today (local date)."""
         today = date.today().isoformat()
@@ -665,6 +679,7 @@ class Database:
     # DASHBOARD STATISTICS
     # ==================================================================
 
+    # Lấy các thống kê tổng quan cho dashboard
     def get_stats(self) -> dict:
         today = date.today().isoformat()
 
@@ -709,6 +724,7 @@ class Database:
             "total_revenue":        total_revenue,
         }
 
+    # Tính tổng doanh thu của tháng 
     def get_month_revenue(self, year: int | None = None, month: int | None = None) -> float:
         """Tổng doanh thu từ các gói đăng ký có start_date trong tháng chỉ định."""
         today = date.today()
@@ -727,6 +743,8 @@ class Database:
         )
         return float(row["total"]) if row else 0.0
 
+
+    # Tính tổng doanh thu của năm
     def get_year_revenue(self, year: int | None = None) -> float:
         """Tổng doanh thu từ các gói đăng ký có start_date trong năm chỉ định."""
         today = date.today()

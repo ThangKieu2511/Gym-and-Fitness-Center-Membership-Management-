@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from datetime import date, timedelta
 
-from PySide6.QtCore import Qt, QTimer, Signal, Slot, QUrl
+from PySide6.QtCore import Qt, QTimer, Signal, Slot, QUrl, QStringListModel
 from PySide6.QtMultimedia import QSoundEffect
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -29,6 +30,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
+    QCompleter,
 )
 
 from controllers.subscription_controller import (
@@ -165,9 +167,19 @@ class RegistrationPanel(QWidget):
 
         root.addWidget(self._section_label("Hội Viên"))
         self._member_combo = QComboBox()
-        self._member_combo.setPlaceholderText("— Chọn hội viên —")
-        self._member_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        self._member_combo.currentIndexChanged.connect(self._on_selection_changed)
+        # Chuyển sang chế độ nhập liệu
+        self._member_combo.setEditable(True)
+        self._member_combo.setInsertPolicy(QComboBox.NoInsert)
+        self._member_combo.completer().setCompletionMode(QCompleter.PopupCompletion)
+        
+        # --- THÊM DÒNG NÀY ĐỂ HIỂN THỊ CHỮ GỢI Ý ---
+        self._member_combo.lineEdit().setPlaceholderText("Vui lòng nhập tên hội viên...")
+        
+        # --- SỬA ĐOẠN NÀY ĐỂ TÌM KIẾM THÔNG MINH ---
+        completer = self._member_combo.completer()
+        completer.setCompletionMode(QCompleter.PopupCompletion)
+        completer.setFilterMode(Qt.MatchContains)  # <--- Dòng này quan trọng nhất
+        completer.setCaseSensitivity(Qt.CaseInsensitive) # Không phân biệt hoa thường
         root.addWidget(self._member_combo)
 
         root.addWidget(self._section_label("Loại Khách"))
