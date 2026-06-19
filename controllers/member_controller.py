@@ -142,13 +142,21 @@ class MemberController:
         self._validate(name, email)
 
         try:
-            # Lấy qr_code gốc để không vô tình xóa mã QR đã có
-            existing = self.db.get_member(member_id) # Kiểm tra hội viên tồn tại trong Database, nếu không sẽ trả về None
+            # Lấy qr_code và image_path gốc để không vô tình xóa dữ liệu đã có
+            existing = self.db.get_member(member_id)
             qr_code  = existing.get("qr_code") if existing else None
+            image_path = existing.get("image_path") if existing else None
 
-            # Gọi tới Database để update hội viên, trả về True nếu thành công
+            # Truyền đúng tên định danh (keyword args) để tránh nhầm lẫn vị trí
             return self.db.update_member( 
-                member_id, name, phone, email, gender, join_date, qr_code
+                member_id, 
+                name, 
+                phone, 
+                email, 
+                gender, 
+                join_date, 
+                image_path=image_path, 
+                qr_code=qr_code
             )
         except sqlite3.IntegrityError as exc:
             raise ValueError(self._integrity_msg(exc)) from exc
@@ -178,7 +186,7 @@ class MemberController:
         
         # ── 1. Kiểm tra hội viên tồn tại ──────────────────────────────── #
         try:
-            existing = self.db.get_member(member_id) # Kiểm tra hội viên tồn tại trong Database, nếu không sẽ trả về None
+            existing = self.db.get_member(member_id)
         except Exception as exc:
             raise RuntimeError(f"Không thể truy vấn hội viên #{member_id}: {exc}") from exc
 
@@ -186,7 +194,7 @@ class MemberController:
             raise ValueError(f"Không tìm thấy hội viên có ID = {member_id}.")
 
         # ── 2. Chuỗi dữ liệu QR theo format Phase 9 ───────────────────── #
-        qr_data = f"member:{member_id}" # Dữ liệu QR sẽ có format "member:{id}" để dễ dàng nhận biết khi quét, có thể mở rộng thêm thông tin khác nếu cần trong tương lai
+        qr_data = f"member:{member_id}"
 
         # ── 3. Đảm bảo thư mục tồn tại ────────────────────────────────── #
         os.makedirs(QR_DIR, exist_ok=True)
@@ -194,13 +202,15 @@ class MemberController:
 
         # ── 4. Tạo file PNG ────────────────────────────────────────────── #
         try:
-            generate_qr(qr_data, file_path) # Gọi hàm ở bên utils/qr_generator.py để tạo file QR PNG
+            generate_qr(qr_data, file_path)
         except Exception as exc:
             raise RuntimeError(f"Không thể tạo file QR: {exc}") from exc
 
         # ── 5. Cập nhật cột qr_code trong DB ──────────────────────────── #
         try:
             join_date = existing.get("join_date", "")
+            image_path = existing.get("image_path", "") # Kéo lại đường dẫn ảnh cũ
+
             self.db.update_member(
                 member_id,
                 existing.get("name", ""),
@@ -208,9 +218,10 @@ class MemberController:
                 existing.get("email", ""),
                 existing.get("gender", ""),
                 join_date,
+                image_path=image_path, # Ghi đè lại đúng ảnh cũ để không bị mất
                 qr_code=qr_data,
             )
         except Exception as exc:
             raise RuntimeError(f"Không thể lưu mã QR vào database: {exc}") from exc
 
-        return os.path.abspath(file_path) # Trả về đường dẫn tuyệt đối của file QR PNG vừa tạo
+        return os.path.abspath(file_path)

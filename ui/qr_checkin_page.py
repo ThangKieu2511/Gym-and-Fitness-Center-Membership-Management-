@@ -118,10 +118,11 @@ class _QRCheckinPageImpl(QWidget):
         super().__init__(parent)
         self._qr_service = None          # được inject từ MainWindow
         self._capture_member_id = None
-        self._live_preview_active = False
+        self._live_preview_active = False # Kiểm tra có đang bật live hay ko 
         self._result_timer = QTimer(self)
         self._result_timer.setSingleShot(True)
         self._result_timer.timeout.connect(self._on_result_timeout)
+
         self._clear_member_timer = QTimer(self)
         self._clear_member_timer.setSingleShot(True)
         self._clear_member_timer.timeout.connect(self._clear_member_photo)
@@ -377,6 +378,7 @@ class _QRCheckinPageImpl(QWidget):
 
     # ── Slots từ QRService ────────────────────────────────────────────── #
 
+    # Nhận frame từ QRService và hiện ảnh lên camera
     @Slot(object)
     def _on_frame_ready(self, frame) -> None:
         """Nhận frame từ QRService và hiển thị lên cam_label (nếu live preview bật)."""
@@ -391,10 +393,11 @@ class _QRCheckinPageImpl(QWidget):
 
     # ── Live preview controls ─────────────────────────────────────────── #
 
+    # Xem live preview thực tế từ camera nền. Không mở thêm camera mới
     @Slot()
     def _on_start_preview(self) -> None:
         """Bật live preview — chỉ hiện frame, không mở camera mới."""
-        if self._qr_service and not self._qr_service.is_running():
+        if self._qr_service and not self._qr_service.is_running(): # Nếu QRService chưa chạy, không bật live preview được
             self._set_result("❌  Camera nền chưa khởi động.", "error")
             return
         self._live_preview_active = True
@@ -404,6 +407,7 @@ class _QRCheckinPageImpl(QWidget):
         self._set_result("🟢  Camera live đang chạy — hướng mã QR vào khung hình.", "valid")
 
     @Slot()
+    # Tắt live camera nhưng để Service chạy nền để tiếp tục quét QR.
     def _on_stop_preview(self) -> None:
         """Tắt live preview — camera nền vẫn chạy."""
         self._live_preview_active = False
@@ -460,6 +464,7 @@ class _QRCheckinPageImpl(QWidget):
 
     # ── Internal helpers ──────────────────────────────────────────────── #
 
+    # Hiển thị frame camera lên QLabel (chỉ khi live preview đang bật)
     def _display_frame(self, frame) -> None:
         rgb  = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         h, w = rgb.shape[:2]
