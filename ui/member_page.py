@@ -149,10 +149,7 @@ class ImageViewDialog(QDialog):
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class MemberDialog(QDialog):
-    """
-    Dialog nhập liệu dùng chung cho cả Add lẫn Edit.
-    Không emit signal — caller đọc .result() rồi gọi .get_data().
-    """
+    
 
     def __init__(
         self,
@@ -243,10 +240,7 @@ class MemberDialog(QDialog):
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class MemberPage(QWidget):
-    """
-    Trang quản lý hội viên đầy đủ.
-    Sử dụng MemberController cho mọi thao tác dữ liệu.
-    """
+    
 
     data_changed = Signal()
     # signal truyền thêm member_name để QRCheckinPage hiển thị
@@ -338,27 +332,27 @@ class MemberPage(QWidget):
         self.btn_edit.setEnabled(False)
         self.btn_delete.setEnabled(False)
         self.btn_qr.setEnabled(False)
-        self.btn_view_image.setEnabled(False)   # ← NEW: tắt khi chưa chọn hàng
+        self.btn_view_image.setEnabled(False)   
         self.btn_photo.setEnabled(False)
 
         bar.addWidget(self.btn_add)
         bar.addWidget(self.btn_edit)
         bar.addWidget(self.btn_delete)
         bar.addWidget(self.btn_qr)
-        bar.addWidget(self.btn_view_image)      # ← NEW: nằm giữa Tạo QR và Chụp Ảnh
+        bar.addWidget(self.btn_view_image)      
         bar.addWidget(self.btn_photo)
         bar.addStretch()
         bar.addWidget(self.btn_refresh)
 
-        self.btn_add.clicked.connect(self.open_add_dialog)  # Kết nối nút bấm với slot mở dialog thêm hội viên
+        self.btn_add.clicked.connect(self.open_add_dialog)  
 
         self.btn_edit.clicked.connect(self.open_edit_dialog)
 
         self.btn_delete.clicked.connect(self.confirm_delete)
 
-        self.btn_qr.clicked.connect(self._on_generate_qr) # Kết nối nút bấm với slot tạo QR cho hội viên đã chọn
+        self.btn_qr.clicked.connect(self._on_generate_qr) 
 
-        self.btn_view_image.clicked.connect(self._on_view_image)   # ← NEW
+        self.btn_view_image.clicked.connect(self._on_view_image)   
 
         self.btn_photo.clicked.connect(self._on_capture_photo)
 
@@ -487,9 +481,10 @@ class MemberPage(QWidget):
         self.table.setItem(row, col, item)
 
     @Slot()
+    # Lấy member đã chọn, trả về dict chứa id, name, phone, email
     def load_data(self) -> None:
         try:
-            members = self._controller.get_members()
+            members = self._controller.get_members() # Gọi tới MemberController 
         except RuntimeError as exc:
             QMessageBox.critical(self, "Lỗi Cơ Sở Dữ Liệu", str(exc))
             return
@@ -502,7 +497,7 @@ class MemberPage(QWidget):
     def _do_search(self) -> None:
         query = self.search_input.text().strip()
         try:
-            members = self._controller.search_members(query)
+            members = self._controller.search_members(query) # Gọi tới MemberController
         except RuntimeError as exc:
             QMessageBox.critical(self, "Lỗi Tìm Kiếm", str(exc))
             return
@@ -521,7 +516,7 @@ class MemberPage(QWidget):
 
     @Slot(str)
     def _on_search_text_changed(self, _text: str) -> None:
-        self._search_timer.start()
+        self._search_timer.start() # Chờ người dùng gõ xong rồi mới hiện thị kết quả
 
     @Slot()
     def _on_refresh(self) -> None:
@@ -544,7 +539,7 @@ class MemberPage(QWidget):
             return
         data = dlg.get_data() # lấy dữ liệu từ ô input 
         try:
-            # Gọi MemberController để thêm hội viên mới vào DB, nếu có lỗi sẽ hiển thị QMessageBox
+            # Gọi tới MemberController để thêm hội viên mới 
             self._controller.add_member(
                 data["name"], data["phone"], data["email"], data["gender"]
             )
@@ -554,7 +549,7 @@ class MemberPage(QWidget):
 
         self._status_lbl.setText("✅  Thêm hội viên thành công!")
         self._on_refresh()
-        self.data_changed.emit()
+        self.data_changed.emit() # emit signal để thông báo cho các component khác biết dữ liệu đã thay đổi
 
     @Slot()
     def open_edit_dialog(self) -> None:
@@ -570,8 +565,10 @@ class MemberPage(QWidget):
         if dlg.exec() != QDialog.Accepted:
             return
 
+        # Lấy dữ liệu đã chỉnh sửa từ dialog
         data = dlg.get_data()
         try:
+            # Gọi tới MemberController để update thông tin hội viên
             self._controller.update_member(
                 member["id"],
                 data["name"],
@@ -589,6 +586,7 @@ class MemberPage(QWidget):
         self.data_changed.emit()
 
     @Slot()
+    # Xác nhận xóa hội viên
     def confirm_delete(self) -> None:
         member = self._selected_member()
         if member is None:
@@ -611,17 +609,17 @@ class MemberPage(QWidget):
             return
 
         try:
-            self._controller.delete_member(member["id"])
+            self._controller.delete_member(member["id"]) # Gọi Tới MemberController 
         except RuntimeError as exc:
             QMessageBox.critical(self, "❌  Xóa Thất Bại", str(exc))
             return
 
         self._status_lbl.setText("🗑️  Đã xóa hội viên.")
-        self._do_search()
+        self._do_search() # refresh lại bảng sau khi xóa
         self.data_changed.emit()
 
     # ══════════════════════════════════════════════════════════════════ #
-    #  Tạo QR  (Phase 10)                                               #
+    #  Tạo QR                                                            #
     # ══════════════════════════════════════════════════════════════════ #
 
     @Slot()
@@ -677,7 +675,7 @@ class MemberPage(QWidget):
             )
             return
 
-        image_path  = member.get("image_path", "") or ""
+        image_path  = member.get("image_path", "") or "" # Lấy image path từ dict member
         member_name = member["name"]
 
         # Kiểm tra có ảnh không
@@ -688,14 +686,15 @@ class MemberPage(QWidget):
             )
             return
 
-        dlg = ImageViewDialog(self, member_name=member_name, image_path=image_path)
-        dlg.exec()
+        dlg = ImageViewDialog(self, member_name=member_name, image_path=image_path) # Mở màn hình diaglog xem ảnh hội viên
+        dlg.exec() # Chạy màn hình Dialog
 
     # ══════════════════════════════════════════════════════════════════ #
     #  Chụp Ảnh  (Phase 10 — emit signal thay vì chụp trực tiếp)       #
     # ══════════════════════════════════════════════════════════════════ #
 
     @Slot()
+    
     def _on_capture_photo(self) -> None:
         """
         Slot xử lý nút "📸 Chụp Ảnh":
@@ -710,7 +709,7 @@ class MemberPage(QWidget):
             )
             return
 
-        self.capture_photo_requested.emit(member["id"], member["name"])
+        self.capture_photo_requested.emit(member["id"], member["name"]) # emit signal với member_id và member_name để QRCheckinPage hiển thị tên hội viên khi chụp ảnh
 
     # ══════════════════════════════════════════════════════════════════ #
     #  Helpers                                                           #
@@ -729,7 +728,7 @@ class MemberPage(QWidget):
         try:
             db_member = self._db.get_member(member_id) # <-- SỬA THÀNH get_member
             if db_member:
-                image_path = db_member.get("image_path", "") or ""
+                image_path = db_member.get("image_path", "") or "" # Lấy image path từ database
         except Exception as e:
             # Bạn nên in lỗi ra console để sau này có lỗi khác thì dễ phát hiện hơn
             print(f"Lỗi khi lấy ảnh từ DB: {e}")

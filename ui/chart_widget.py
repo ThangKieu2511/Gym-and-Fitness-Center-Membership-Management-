@@ -57,7 +57,7 @@ class PieChartWidget(QWidget):
         self._figure.clear()
         ax = self._figure.add_subplot(111)
 
-        total = valid + expired
+        total = valid + expired # Tổng số check-in để tính tỷ lệ
         if total == 0:
             ax.text(0.5, 0.5, "Không có dữ liệu",
                     ha="center", va="center", transform=ax.transAxes)

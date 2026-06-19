@@ -55,12 +55,12 @@ class MainWindow(QMainWindow):
         root.addWidget(self._build_content())
         self._member_page.data_changed.connect(self._subscription_page.refresh_members)
         self._member_page.data_changed.connect(self._dashboard_page.refresh_data)
-        self._member_page.capture_photo_requested.connect(self.open_capture_page)
+        self._member_page.capture_photo_requested.connect(self.open_capture_page) # Kết nối signal capture_photo_requested từ MemberPage đến hàm open_capture_page của MainWindow
 
     def open_capture_page(self, member_id: int, member_name: str = "") -> None:
         """Chuyển sang trang QR và kích hoạt chế độ chụp ảnh."""
         self._navigate(3)
-        self._qr_page.start_capture_mode(member_id, member_name)
+        self._qr_page.start_capture_mode(member_id, member_name) # Truyền member_id và member_name vào QRCheckinPage để hiển thị tên hội viên khi chụp ảnh
 
     def _build_sidebar(self) -> QWidget:
         sidebar = QWidget()

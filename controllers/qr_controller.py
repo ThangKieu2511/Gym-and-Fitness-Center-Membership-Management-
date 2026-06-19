@@ -17,6 +17,7 @@ from typing import Callable
 
 import cv2
 from pyzbar import pyzbar
+from pyzbar.pyzbar import ZBarSymbol
 
 from controllers.checkin_controller import CheckinController
 from database import Database
@@ -103,7 +104,8 @@ class QRController:
         Decode tất cả QR/barcode trong frame.
         Trả về member_id (int) nếu tìm thấy đúng format, ngược lại None.
         """
-        codes = pyzbar.decode(frame)
+        # Ép thư viện ZBar chỉ quét định dạng QRCODE, bỏ qua PDF417 để chặn lỗi tầng thấp
+        codes = pyzbar.decode(frame, symbols=[ZBarSymbol.QRCODE])
         for code in codes:
             raw = code.data.decode("utf-8", errors="ignore").strip()
             m = self.QR_PATTERN.match(raw)

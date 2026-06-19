@@ -364,10 +364,10 @@ class _QRCheckinPageImpl(QWidget):
         Được gọi từ MainWindow khi user bấm "📸 Chụp Ảnh" ở MemberPage.
         """
         self._capture_member_id = member_id
-        self._btn_capture.setVisible(True)
+        self._btn_capture.setVisible(True) # Hiện nút chụp ảnh khi vào capture mode
         # Bật live preview nếu chưa bật
         if not self._live_preview_active:
-            self._on_start_preview()
+            self._on_start_preview() # Bật live preview nếu chưa bật
         name_display = f" — {member_name}" if member_name else ""
         self._set_result(
             f"📸  Chế độ chụp ảnh{name_display} — Bấm nút Chụp Ảnh để lưu.",
@@ -425,7 +425,7 @@ class _QRCheckinPageImpl(QWidget):
             self._set_result("❌  QRService chưa được khởi tạo.", "error")
             return
 
-        frame = self._qr_service.capture_frame()
+        frame = self._qr_service.capture_frame() # Lấy frame hiện tại từ QRService mà không dừng camera
         if frame is None:
             self._set_result("❌  Lỗi camera: Không thể lấy frame.", "error")
             return
@@ -435,15 +435,15 @@ class _QRCheckinPageImpl(QWidget):
             self._set_result("❌  Chưa chọn hội viên để chụp ảnh.", "error")
             return
 
-        save_dir  = os.path.join("images", "members")
+        save_dir  = os.path.join("images", "members") # Thư mục lưu ảnh hội viên
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.join(save_dir, f"{member_id}.jpg")
 
-        cv2.imwrite(save_path, frame)
+        cv2.imwrite(save_path, frame) # Lưu ảnh hội viên vào thư mục images/members với tên member_id.jpg
 
         from database import Database
         db = Database()
-        db.update_member_image(member_id, save_path)
+        db.update_member_image(member_id, save_path) # Cập nhật đường dẫn ảnh vào database
 
         member = db.get_member(member_id)
         name = member["name"] if member else "Hội viên"

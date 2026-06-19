@@ -19,16 +19,7 @@ except ImportError:
 
 
 class QRService(QObject):
-    """
-    Singleton-style service quản lý camera nền toàn app.
-
-    Signals
-    -------
-    scanned(dict)       : emit khi decode được QR hợp lệ.
-    frame_ready(object) : emit mỗi tick với frame BGR (numpy array) để live preview.
-    camera_status(str)  : emit khi trạng thái camera thay đổi — text hiển thị lên UI.
-    """
-
+   
     scanned       = Signal(dict)
     frame_ready   = Signal(object)   # cv2 BGR frame (numpy ndarray)
     camera_status = Signal(str)      # status text cho footer / cam_status_lbl

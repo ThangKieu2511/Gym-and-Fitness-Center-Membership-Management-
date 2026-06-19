@@ -213,7 +213,7 @@ class Database:
             with self.connection:
                 cursor = self.connection.execute(sql, params)
                 if fetch == "one":
-                    row = cursor.fetchone()
+                    row = cursor.fetchone() # fetchone() trả về một bản ghi dưới dạng sqlite3.Row hoặc None nếu không còn bản ghi nào
                     return _row_to_dict(cursor, row) if row else None
                 if fetch == "all":
                     rows = cursor.fetchall()
@@ -378,7 +378,7 @@ class Database:
                 )
                 updated = cursor.rowcount > 0
             if updated:
-                logger.info("Member updated: id=%s name='%s'", member_id, name)
+                logger.info("Member updated: id=%s name='%s'", member_id, name) #   Ghi log thông tin hội viên được cập nhật
             return updated
         except sqlite3.Error as exc:
             logger.exception("Error updating member id=%s: %s", member_id, exc)
@@ -393,7 +393,7 @@ class Database:
                 )
                 deleted = cursor.rowcount > 0
             if deleted:
-                logger.info("Member deleted: id=%s", member_id)
+                logger.info("Member deleted: id=%s", member_id) # Ghi log thông tin hội viên bị xóa khỏi database
             return deleted
         except sqlite3.Error as exc:
             logger.exception("Error deleting member id=%s: %s", member_id, exc)
@@ -741,7 +741,7 @@ class Database:
             (f"{month_prefix}%",),
             fetch="one",
         )
-        return float(row["total"]) if row else 0.0
+        return float(row["total"]) if row else 0.0 # Trả về tổng doan thu của tháng
 
 
     # Tính tổng doanh thu của năm

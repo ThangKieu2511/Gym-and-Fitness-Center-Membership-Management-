@@ -41,6 +41,7 @@ class MemberController:
             raise ValueError("Địa chỉ email không hợp lệ.")
 
     @staticmethod
+    # Chuyển lỗi trùng lặp của SQLite thành thông báo dễ hiểu cho người dùng
     def _integrity_msg(exc: sqlite3.IntegrityError) -> str:
         """Chuyển IntegrityError thành thông báo tiếng Việt dễ hiểu."""
         msg = str(exc).lower()
@@ -71,30 +72,14 @@ class MemberController:
             raise RuntimeError(f"Không thể tải danh sách hội viên: {exc}") from exc
 
     def get_member_by_id(self, member_id: int) -> dict | None:
-        """
-        Trả về một hội viên theo khóa chính, hoặc None nếu không tồn tại.
-
-        Raises:
-            RuntimeError: nếu thao tác DB thất bại.
-        """
+        # Trả về hội viên theo ID.
         try:
             return self.db.get_member(member_id)
         except Exception as exc:
             raise RuntimeError(f"Không thể tải hội viên #{member_id}: {exc}") from exc
 
     def search_members(self, query: str) -> list[dict]:
-        """
-        Tìm kiếm hội viên theo tên, số điện thoại hoặc email.
-
-        Nếu query rỗng → trả về toàn bộ danh sách (tương đương get_members).
-
-        Args:
-            query: Chuỗi tìm kiếm (không phân biệt hoa/thường, hỗ trợ LIKE).
-        Returns:
-            list[dict] danh sách hội viên khớp.
-        Raises:
-            RuntimeError: nếu thao tác DB thất bại.
-        """
+        # Tìm kiếm hội viên theo tên hoặc sđth.
         query = query.strip()
         try:
             if not query:
@@ -107,6 +92,7 @@ class MemberController:
     #  Thêm mới                                                            #
     # ------------------------------------------------------------------ #
 
+    # Thêm hội viên mới, tự cho ID tự động.
     def add_member(
         self,
         name: str,
@@ -114,15 +100,7 @@ class MemberController:
         email: str,
         gender: str,
     ) -> int:
-        """
-        Kiểm tra dữ liệu đầu vào rồi gọi db.add_member().
-
-        Returns:
-            ID tự động của hội viên vừa tạo.
-        Raises:
-            ValueError:   dữ liệu không hợp lệ hoặc trùng phone/email.
-            RuntimeError: lỗi DB không xác định.
-        """
+       
         name   = name.strip()
         phone  = phone.strip()
         email  = email.strip()
@@ -145,6 +123,7 @@ class MemberController:
     #  Cập nhật                                                            #
     # ------------------------------------------------------------------ #
 
+    # Cập nhật thông tin hội viên theo ID.
     def update_member(
         self,
         member_id: int,
@@ -154,18 +133,7 @@ class MemberController:
         gender: str,
         join_date: str = "",
     ) -> bool:
-        """
-        Kiểm tra dữ liệu đầu vào rồi gọi db.update_member().
-
-        Tham số join_date được truyền qua để database không ghi đè bằng
-        chuỗi rỗng — luôn truyền giá trị gốc từ bản ghi hiện tại.
-
-        Returns:
-            True nếu cập nhật thành công; False nếu không tìm thấy id.
-        Raises:
-            ValueError:   dữ liệu không hợp lệ hoặc trùng phone/email.
-            RuntimeError: lỗi DB không xác định.
-        """
+        
         name   = name.strip()
         phone  = phone.strip()
         email  = email.strip()
@@ -175,10 +143,11 @@ class MemberController:
 
         try:
             # Lấy qr_code gốc để không vô tình xóa mã QR đã có
-            existing = self.db.get_member(member_id)
+            existing = self.db.get_member(member_id) # Kiểm tra hội viên tồn tại trong Database, nếu không sẽ trả về None
             qr_code  = existing.get("qr_code") if existing else None
 
-            return self.db.update_member(
+            # Gọi tới Database để update hội viên, trả về True nếu thành công
+            return self.db.update_member( 
                 member_id, name, phone, email, gender, join_date, qr_code
             )
         except sqlite3.IntegrityError as exc:
@@ -193,16 +162,9 @@ class MemberController:
     # ------------------------------------------------------------------ #
 
     def delete_member(self, member_id: int) -> bool:
-        """
-        Xóa hội viên theo khóa chính.
-
-        Returns:
-            True nếu xóa thành công; False nếu không tìm thấy id.
-        Raises:
-            RuntimeError: lỗi DB không xác định.
-        """
+        
         try:
-            return self.db.delete_member(member_id)
+            return self.db.delete_member(member_id) # Gọi tới Database để xóa hội viên theo ID.
         except Exception as exc:
             raise RuntimeError(
                 f"Không thể xóa hội viên #{member_id}: {exc}"
@@ -251,4 +213,4 @@ class MemberController:
         except Exception as exc:
             raise RuntimeError(f"Không thể lưu mã QR vào database: {exc}") from exc
 
-        return os.path.abspath(file_path)
+        return os.path.abspath(file_path) # Trả về đường dẫn tuyệt đối của file QR PNG vừa tạo

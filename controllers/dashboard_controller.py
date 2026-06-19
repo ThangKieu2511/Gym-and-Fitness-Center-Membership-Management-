@@ -42,6 +42,7 @@ class DashboardController:
         start = f"{today} 00:00:00"
         end   = f"{today} 23:59:59"
 
+        # Tổng số lượt check-in hôm nay
         total_row = self._db._execute(
             """
             SELECT COUNT(*) AS cnt
@@ -53,6 +54,7 @@ class DashboardController:
             fetch="one",
         )
 
+        # Số hội viên distinct hôm nay
         unique_row = self._db._execute(
             """
             SELECT COUNT(DISTINCT member_id) AS cnt
@@ -64,6 +66,7 @@ class DashboardController:
             fetch="one",
         )
 
+        # Chi tiết số lần check-in của từng hội viên hôm nay
         detail = self._db._execute(
             """
             SELECT c.member_id,
@@ -81,9 +84,9 @@ class DashboardController:
         )
 
         return {
-            "total_checkins": total_row["cnt"] if total_row else 0,
-            "unique_members": unique_row["cnt"] if unique_row else 0,
-            "detail":         detail or [],
+            "total_checkins": total_row["cnt"] if total_row else 0, # Tổng số lượt check-in hôm nay
+            "unique_members": unique_row["cnt"] if unique_row else 0, # Số hội viên đi tập hôm nay (distinct member_id)
+            "detail":         detail or [], # Chi tiết số lần check-in của từng hội viên
         }
 
     # ── Tháng hiện tại ──────────────────────────────────────────────────── #
@@ -107,6 +110,7 @@ class DashboardController:
         else:
             next_month = f"{today.year}-{today.month + 1:02d}-01 00:00:00"
 
+        # Tổng số lượt check-in tháng này
         total_row = self._db._execute(
             """
             SELECT COUNT(*) AS cnt
@@ -118,6 +122,7 @@ class DashboardController:
             fetch="one",
         )
 
+        # Số hội viên đi tập của tháng này (distinct member_id)
         unique_row = self._db._execute(
             """
             SELECT COUNT(DISTINCT member_id) AS cnt
@@ -129,6 +134,7 @@ class DashboardController:
             fetch="one",
         )
 
+        # Chi tiết số lần check-in của từng hội viên tháng này
         detail = self._db._execute(
             """
             SELECT c.member_id,
@@ -159,6 +165,7 @@ class DashboardController:
         Trả về số hội viên đang có gói subscription active (end_date >= hôm nay).
         """
         today = date.today().isoformat()
+        # Đếm số hội viên còn active subscription (distinct member_id)
         row = self._db._execute(
             """
             SELECT COUNT(DISTINCT member_id) AS cnt

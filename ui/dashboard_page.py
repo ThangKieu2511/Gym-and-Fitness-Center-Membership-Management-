@@ -367,7 +367,7 @@ class DashboardPage(QWidget):
         self._cached_checkin_status: dict       = {"valid": 0, "expired": 0}
         self._cached_top_members:    list[dict] = []
         self._setup_ui()
-        self.refresh_data()
+        self.refresh_data() # Gọi dữ liệu và tải lên UI ngay từ lúc khởi tạo
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -456,7 +456,8 @@ class DashboardPage(QWidget):
         hdr.addWidget(btn_refresh)
 
         return hdr
-
+    
+    # Tạo các stat card ở đầu trang.
     def _build_stat_cards(self) -> QGridLayout:
         grid = QGridLayout()
         grid.setSpacing(12)
@@ -480,6 +481,7 @@ class DashboardPage(QWidget):
 
         return grid
 
+    # Hàm gọi tới Controller để lấy dữ liệu và đưa lên UI.
     def refresh_data(self) -> None:
         try:
             today_stats    = self._ctrl.get_today_stats()
@@ -492,8 +494,8 @@ class DashboardPage(QWidget):
             self._cached_checkin_status = checkin_status
             self._cached_top_members    = top_members
 
-            self._card_today_total.set_value(str(today_stats["total_checkins"]))
-            self._card_today_people.set_value(str(today_stats["unique_members"]))
+            self._card_today_total.set_value(str(today_stats["total_checkins"])) # Tổng số lần check-in hôm nay
+            self._card_today_people.set_value(str(today_stats["unique_members"])) # Số người đi tập hôm nay (đếm theo member_id duy nhất)
 
             month_rev = self._ctrl.get_month_revenue()
             year_rev  = self._ctrl.get_year_revenue()
@@ -503,8 +505,8 @@ class DashboardPage(QWidget):
             self._card_month_people.set_value(str(month_stats["unique_members"]))
             self._card_active.set_value(str(active_count))
 
-            self._today_table.load(today_stats["detail"])
-            self._top_table.load(top_members)
+            self._today_table.load(today_stats["detail"]) # Load chi tiết check-in hôm nay
+            self._top_table.load(top_members) # Load top 5 hội viên đi tập nhiều nhất tháng này
 
             current_id = self._history_panel.selected_member_id()
             self._history_panel.populate_members(all_members)
@@ -513,12 +515,12 @@ class DashboardPage(QWidget):
                 combo = self._history_panel._combo
                 for i in range(combo.count()):
                     if combo.itemData(i) == current_id:
-                        combo.setCurrentIndex(i)
+                        combo.setCurrentIndex(i) # 
                         break
                 self._load_member_history()
             elif all_members:
                 self._history_panel._combo.setCurrentIndex(0)
-                self._load_member_history()
+                self._load_member_history() # Nếu chưa có member nào được chọn, mặc định chọn member đầu tiên để hiển thị lịch sử check-in của họ.
 
             now_str = date.today().strftime("%d/%m/%Y")
             self._status_lbl.setText(f"Cập nhật lúc: {now_str}")
@@ -540,8 +542,8 @@ class DashboardPage(QWidget):
 
     @Slot()
     def _open_chart_dialog(self) -> None:
-        dlg = ChartDialog(self)
-        dlg.load_data(self._cached_checkin_status, self._cached_top_members)
+        dlg = ChartDialog(self) # Tạo một màn hình dialog mới để hiển thị biểu đồ
+        dlg.load_data(self._cached_checkin_status, self._cached_top_members) # Đẩy dữ liệu đã cache vào dialog để nó tự vẽ biểu đồ
         dlg.exec()
 
     @Slot()
@@ -556,7 +558,7 @@ class DashboardPage(QWidget):
         today_str = date.today().strftime("%Y-%m-%d")
         default_name = f"BaoCao_GymTK_{today_str}.xlsx"
 
-        file_path, _ = QFileDialog.getSaveFileName(
+        file_path, _ = QFileDialog.getSaveFileName( # Mở màn hình địa chỉ lưu file
             self,
             "Lưu Báo Cáo Excel",
             default_name,

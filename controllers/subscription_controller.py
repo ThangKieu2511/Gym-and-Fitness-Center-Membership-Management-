@@ -43,6 +43,7 @@ class SubscriptionController:
     # ── Dữ liệu tĩnh cho UI ─────────────────────────────────────────── #
 
     @staticmethod
+    # Lấy danh sách các gói tập để hiển thị trong UI
     def get_plans() -> list[dict]:
         result: list[dict] = []
         for plan_type, cfg in PLAN_CONFIG.items():
@@ -80,17 +81,18 @@ class SubscriptionController:
 
     # ── Helpers nội bộ ──────────────────────────────────────────────── #
 
+    # Lấy plan_id từ database hoặc tạo mới nếu chưa có
     def _get_or_create_plan(self, plan_type: str, customer_type: str) -> int:
-        cfg          = PLAN_CONFIG[plan_type]
-        ctype_label  = CUSTOMER_TYPE_LABEL[customer_type]
+        cfg          = PLAN_CONFIG[plan_type] # Lấy cấu hình gói
+        ctype_label  = CUSTOMER_TYPE_LABEL[customer_type] # Lấy nhãn loại khách
         plan_name    = f"{cfg['label']} — {ctype_label}"
-        price        = cfg["paid"] * PRICE_PER_MONTH[customer_type]
+        price        = cfg["paid"] * PRICE_PER_MONTH[customer_type] # Lấy giá theo tháng
         total_months = cfg["paid"] + cfg["bonus"]
         duration_days = total_months * 30
 
         existing = self._db.get_plan_by_name(plan_name)
         if existing:
-            return existing["id"]
+            return existing["id"] # Nếu đã có plan với tên này thì trả về id của nó
 
         return self._db._execute(
             "INSERT INTO plans (name, duration, price) VALUES (?, ?, ?)",
@@ -120,7 +122,7 @@ class SubscriptionController:
             raise ValueError("Chưa chọn hội viên.")
 
         try:
-            active = self._db.get_active_subscription(member_id)
+            active = self._db.get_active_subscription(member_id) # Kiểm tra xem hội viên đã có gói active chưa
 
             if active:
                 extra_days = self._duration_days(plan_type)
@@ -132,12 +134,13 @@ class SubscriptionController:
                 )
                 return active["id"]
             else:
-                plan_id = self._get_or_create_plan(plan_type, customer_type)
-                return self._db.add_subscription(member_id, plan_id)
+                plan_id = self._get_or_create_plan(plan_type, customer_type) # Lấy plan_id từ database hoặc tạo mới nếu chưa có
+                return self._db.add_subscription(member_id, plan_id) # Thêm gói mới cho hội viên
 
         except sqlite3.Error as exc:
             raise RuntimeError(f"Lỗi khi lưu gói đăng ký: {exc}") from exc
 
+    # Gia hạn gói tập hiện tại của hội viên
     def extend_subscription(
         self,
         member_id: int,
@@ -169,16 +172,19 @@ class SubscriptionController:
         except sqlite3.Error as exc:
             raise RuntimeError(f"Lỗi khi gia hạn gói: {exc}") from exc
 
+
+    # Hủy gói tập hiện tại của hội viên
     def cancel_subscription(self, subscription_id: int) -> bool:
         """Huỷ gói theo subscription_id."""
         try:
-            result = self._db.cancel_subscription(subscription_id)
+            result = self._db.cancel_subscription(subscription_id) # Gọi tới database để huỷ gói
             if not result:
                 raise ValueError("Không tìm thấy gói đăng ký.")
             return True
         except sqlite3.Error as exc:
             raise RuntimeError(f"Lỗi khi huỷ gói: {exc}") from exc
-
+        
+    # Lấy danh sách gói tập của hội viên
     def get_member_subscriptions(self, member_id: int) -> list[dict]:
         self._db.expire_outdated_subscriptions()
         return self._db.get_subscriptions(member_id)

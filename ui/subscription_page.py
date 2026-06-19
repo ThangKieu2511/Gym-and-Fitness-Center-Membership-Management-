@@ -138,6 +138,9 @@ class PreviewCard(QFrame):
 # ══════════════════════════════════════════════════════════════════════════ #
 
 class RegistrationPanel(QWidget):
+
+    refresh_requested = Signal() # Tín hiệu để yêu cầu làm mới danh sách hội viên từ SubscriptionPage
+
     subscription_created  = Signal(int, str, str)
     subscription_extended = Signal(int)
     checkin_done          = Signal(int, str)
@@ -149,6 +152,9 @@ class RegistrationPanel(QWidget):
         self._setup_sound_effects()
         self._setup_ui()
         self._refresh_members()
+
+        # Đặt combo về trạng thái mặc định (chưa chọn ai) sau khi đã load dữ liệu
+        self._member_combo.setCurrentIndex(-1)
 
     def _setup_sound_effects(self) -> None:
         """Khởi tạo QSoundEffect cho âm thanh ăn mừng giao dịch."""
@@ -244,26 +250,35 @@ class RegistrationPanel(QWidget):
         return lbl
 
     @Slot()
+    # Làm mới danh sách hội viên từ cơ sở dữ liệu và cập nhật combo box
     def _refresh_members(self) -> None:
-        prev_id = self._current_member_id()
+        # 1. Block signal để tránh kích hoạt logic khi đang làm mới
         self._member_combo.blockSignals(True)
+        
+        # 2. Phát tín hiệu để SubscriptionPage xóa bảng bên phải
+        self.refresh_requested.emit() 
+        
+        # 3. Xóa dữ liệu cũ trong combo box
         self._member_combo.clear()
+        
+        # 4. Lấy lại dữ liệu hội viên mới nhất
         try:
             members = self._controller.get_all_members()
         except Exception:
             members = []
+            
+        # 5. Thêm hội viên vào combo
         for m in members:
-            display = m["name"]
-            if m.get("phone"):
-                display += f"  ({m['phone']})"
+            display = f"{m['name']}  ({m.get('phone', '')})"
             self._member_combo.addItem(display, userData=m["id"])
-        if prev_id is not None:
-            for i in range(self._member_combo.count()):
-                if self._member_combo.itemData(i) == prev_id:
-                    self._member_combo.setCurrentIndex(i)
-                    break
-        self._member_combo.blockSignals(False)
-        self._on_selection_changed()
+            
+        # 6. ÉP COMBO BOX VỀ TRẠNG THÁI TRỐNG (Hiện placeholder)
+        self._member_combo.setCurrentIndex(-1) # Đặt về trạng thái chưa chọn ai
+        self._member_combo.lineEdit().setPlaceholderText("Vui lòng nhập tên hội viên...")
+            
+        self._member_combo.blockSignals(False) 
+        self._on_selection_changed() # Cập nhật preview khi đã load xong dữ liệu mới
+       
 
     def _current_member_id(self) -> int | None:
         idx = self._member_combo.currentIndex()
@@ -290,24 +305,25 @@ class RegistrationPanel(QWidget):
         self._update_preview()
 
     def _require_member(self) -> int | None:
-        member_id = self._current_member_id()
+        member_id = self._current_member_id() # Lấy member_id hiện tại từ combo box
         if member_id is None:
             QMessageBox.warning(self, "Thiếu Thông Tin", "Vui lòng chọn hội viên.")
         return member_id
 
     @Slot()
+    # Đăng kí gói mới hoặc gia hạn nếu đã có gói active
     def _on_register(self) -> None:
-        member_id = self._require_member()
+        member_id = self._require_member() 
         if member_id is None:
             return
 
-        plan_type   = self._current_plan_type()
-        ctype       = self._current_ctype()
-        preview     = SubscriptionController.get_plan_preview(plan_type, ctype)
-        member_name = self._member_combo.currentText()
-        plan_label  = PLAN_LABELS[plan_type]
+        plan_type   = self._current_plan_type() 
+        ctype       = self._current_ctype() # Lấy loại khách hiện tại từ combo box
+        preview     = SubscriptionController.get_plan_preview(plan_type, ctype) # Lấy thông tin gói tập dựa trên loại gói và loại khách
+        member_name = self._member_combo.currentText() 
+        plan_label  = PLAN_LABELS[plan_type] # Lấy nhãn hiển thị của gói tập từ PLAN_LABELS
 
-        active = self._controller._db.get_active_subscription(member_id)
+        active = self._controller._db.get_active_subscription(member_id) # Kiểm tra xem hội viên đã có gói active chưa
         extra_msg = ""
         if active:
             extra_msg = (
@@ -332,7 +348,7 @@ class RegistrationPanel(QWidget):
             return
 
         try:
-            self._controller.create_subscription(member_id, plan_type, ctype)
+            self._controller.create_subscription(member_id, plan_type, ctype) # Gọi tới SubscriptionController để tạo gói mới
         except (ValueError, RuntimeError) as exc:
             QMessageBox.critical(self, "❌  Thất Bại", str(exc))
             return
@@ -345,6 +361,8 @@ class RegistrationPanel(QWidget):
         self.subscription_created.emit(member_id, plan_type, ctype)
 
     @Slot()
+
+    # Gia hạn gói hiện tại nếu có gói active, nếu không thì cảnh báo
     def _on_extend(self) -> None:
         member_id = self._require_member()
         if member_id is None:
@@ -399,6 +417,7 @@ class RegistrationPanel(QWidget):
         self.subscription_extended.emit(member_id)
 
     @Slot()
+    # Check in cho hội viên, kiểm tra gói active và hiển thị thông báo
     def _on_checkin(self) -> None:
         member_id = self._require_member()
         if member_id is None:
@@ -408,7 +427,7 @@ class RegistrationPanel(QWidget):
         QTimer.singleShot(2000, lambda: self._btn_checkin.setEnabled(True))
 
         try:
-            result = self._checkin_controller.checkin(member_id)
+            result = self._checkin_controller.checkin(member_id) # Gọi tới CheckinController để thực hiện check-in
         except Exception as exc:
             QMessageBox.critical(self, "❌  Lỗi Check-in", str(exc))
             self._btn_checkin.setEnabled(True)
@@ -499,7 +518,7 @@ class SubscriptionTable(QWidget):
 
     def refresh(self) -> None:
         if self._member_id is not None:
-            self.load_for_member(self._member_id, self._member_name)
+            self.load_for_member(self._member_id, self._member_name) # Tải lại danh sách gói tập cho hội viên hiện tại
 
     def clear_table(self) -> None:
         self._member_id   = None
@@ -579,6 +598,8 @@ class SubscriptionTable(QWidget):
         item.setFlags(Qt.ItemIsSelectable | Qt.ItemIsEnabled)
         self._table.setItem(row, COL_STATUS, item)
 
+
+    # Hủy gói tập và thêm xác nhận trước khi hủy gói của hội viên
     def _on_cancel(self, sub_id: int, plan_name: str) -> None:
         reply = QMessageBox.question(
             self,
@@ -592,7 +613,7 @@ class SubscriptionTable(QWidget):
             return
 
         try:
-            self._controller.cancel_subscription(sub_id)
+            self._controller.cancel_subscription(sub_id) # Gọi tới SubscriptionController để huỷ gói
         except (ValueError, RuntimeError) as exc:
             QMessageBox.critical(self, "❌  Thất Bại", str(exc))
             return
@@ -611,6 +632,8 @@ class SubscriptionPage(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._setup_ui()
+
+        self._reg_panel.refresh_requested.connect(self._sub_table.clear_table) # Kết nối tín hiệu refresh_requested từ RegistrationPanel đến phương thức clear_table của SubscriptionTable
 
     def _setup_ui(self) -> None:
         root = QVBoxLayout(self)
@@ -633,6 +656,8 @@ class SubscriptionPage(QWidget):
         left_layout.setContentsMargins(0, 0, 0, 0)
         self._reg_panel = RegistrationPanel()
         left_layout.addWidget(self._reg_panel)
+
+        # Di chuyển việc kết nối signal xuống dưới để không bị lỗi thứ tự khởi tạo
         splitter.addWidget(left_wrap)
 
         right_wrap = QWidget()
@@ -648,6 +673,12 @@ class SubscriptionPage(QWidget):
         self._status_lbl = QLabel("Chọn hội viên và gói tập để bắt đầu.")
         self._status_lbl.setObjectName("statusLabel")
         root.addWidget(self._status_lbl)
+
+        
+        self._reg_panel.refresh_requested.connect(self._sub_table.clear_table)
+        self._reg_panel.refresh_requested.connect(
+            lambda: self._status_lbl.setText("Đã làm mới danh sách hội viên.")
+        )
 
         self._reg_panel._member_combo.currentIndexChanged.connect(self._on_member_changed)
         self._reg_panel.subscription_created.connect(self._on_sub_created)
@@ -682,11 +713,10 @@ class SubscriptionPage(QWidget):
     def _on_member_changed(self) -> None:
         member_id = self._reg_panel.selected_member_id()
         if member_id is None:
-            self._sub_table.clear_table()
+            self._sub_table.clear_table() # Tự ẩn dữ liệu khi không chọn ai
             return
         member_name = self._reg_panel._member_combo.currentText()
         self._sub_table.load_for_member(member_id, member_name)
-        self._status_lbl.setText(f"Đang xem: {member_name}")
 
     @Slot(int, str, str)
     def _on_sub_created(self, member_id: int, plan_type: str, ctype: str) -> None:
@@ -731,3 +761,13 @@ class SubscriptionPage(QWidget):
 
     def refresh_members(self) -> None:
         self._reg_panel.refresh_members()
+
+    # Xóa bảng trắng danh sách gói tập và reset trạng thái giao diện về mặc định
+    def clear_table(self) -> None:
+        """Xóa trắng bảng danh sách gói tập."""
+        self._member_id = None
+        self._member_name = ""
+        self._sub_ids.clear()
+        self._table.setRowCount(0) # Xóa sạch các dòng
+        self._count_lbl.setText("")
+        self._title_lbl.setText("📄  Gói Đã Đăng Ký")
