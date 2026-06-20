@@ -143,7 +143,7 @@ class MemberController:
 
         try:
             # Lấy qr_code và image_path gốc để không vô tình xóa dữ liệu đã có
-            existing = self.db.get_member(member_id)
+            existing = self.db.get_member(member_id) # Gọi tới Database để lấy thông tin hội viên
             qr_code  = existing.get("qr_code") if existing else None
             image_path = existing.get("image_path") if existing else None
 

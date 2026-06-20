@@ -358,7 +358,7 @@ class RegistrationPanel(QWidget):
             f"Đã xử lý gói <b>{plan_label}</b> cho <b>{member_name}</b>!",
         )
         self._sfx_celebrate.play()  # Phát âm thanh ăn mừng thành công
-        self.subscription_created.emit(member_id, plan_type, ctype)
+        self.subscription_created.emit(member_id, plan_type, ctype) # Phát tín hiệu thông báo đã tạo gói thành công để SubscriptionPage cập nhật bảng bên phải
 
     @Slot()
 

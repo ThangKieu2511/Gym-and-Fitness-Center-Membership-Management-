@@ -122,20 +122,25 @@ class SubscriptionController:
             raise ValueError("Chưa chọn hội viên.")
 
         try:
-            active = self._db.get_active_subscription(member_id) # Kiểm tra xem hội viên đã có gói active chưa
+            active = self._db.get_active_subscription(member_id)
+            plan_id = self._get_or_create_plan(plan_type, customer_type)
 
             if active:
+                # FIX LỖI: Thay vì UPDATE bản ghi cũ, tạo hẳn một bản ghi mới để dashboard ghi nhận doanh thu
                 extra_days = self._duration_days(plan_type)
                 old_end    = date.fromisoformat(active["end_date"])
                 new_end    = old_end + timedelta(days=extra_days)
-                self._db._execute(
-                    "UPDATE subscriptions SET end_date = ? WHERE id = ?",
-                    (new_end.isoformat(), active["id"]),
+                today_str  = date.today().isoformat()
+                
+                return self._db.add_subscription(
+                    member_id=member_id,
+                    plan_id=plan_id,
+                    start_date=today_str,
+                    end_date=new_end.isoformat(),
+                    status="active"
                 )
-                return active["id"]
             else:
-                plan_id = self._get_or_create_plan(plan_type, customer_type) # Lấy plan_id từ database hoặc tạo mới nếu chưa có
-                return self._db.add_subscription(member_id, plan_id) # Thêm gói mới cho hội viên
+                return self._db.add_subscription(member_id, plan_id)
 
         except sqlite3.Error as exc:
             raise RuntimeError(f"Lỗi khi lưu gói đăng ký: {exc}") from exc
@@ -161,14 +166,20 @@ class SubscriptionController:
             )
 
         try:
+            # FIX LỖI: Tạo một bản ghi gia hạn mới với start_date là ngày hôm nay để ghi nhận tiền vào tháng này
+            plan_id = self._get_or_create_plan(plan_type, customer_type)
             extra_days = self._duration_days(plan_type)
             old_end    = date.fromisoformat(active["end_date"])
             new_end    = old_end + timedelta(days=extra_days)
-            self._db._execute(
-                "UPDATE subscriptions SET end_date = ? WHERE id = ?",
-                (new_end.isoformat(), active["id"]),
+            today_str  = date.today().isoformat()
+            
+            return self._db.add_subscription(
+                member_id=member_id,
+                plan_id=plan_id,
+                start_date=today_str,
+                end_date=new_end.isoformat(),
+                status="active"
             )
-            return active["id"]
         except sqlite3.Error as exc:
             raise RuntimeError(f"Lỗi khi gia hạn gói: {exc}") from exc
 

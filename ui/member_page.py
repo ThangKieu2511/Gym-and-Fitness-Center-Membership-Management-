@@ -519,6 +519,7 @@ class MemberPage(QWidget):
         self._search_timer.start() # Chờ người dùng gõ xong rồi mới hiện thị kết quả
 
     @Slot()
+    # Làm mới lại bảng dữ liệu
     def _on_refresh(self) -> None:
         self.search_input.blockSignals(True)
         self.search_input.clear()
@@ -535,7 +536,7 @@ class MemberPage(QWidget):
     # Mở dialog thêm hội viên mới, sau khi thêm thành công sẽ refresh lại bảng và emit data_changed
     def open_add_dialog(self) -> None:
         dlg = MemberDialog(self) # dialog trống để nhập thông tin hội viên mới  
-        if dlg.exec() != QDialog.Accepted:
+        if dlg.exec() != QDialog.Accepted: # Nếu người dùng bấm Hủy hoặc đóng dialog thì không làm gì cả
             return
         data = dlg.get_data() # lấy dữ liệu từ ô input 
         try:
@@ -726,7 +727,7 @@ class MemberPage(QWidget):
         # Lấy image_path từ DB để phục vụ tính năng Xem Ảnh
         image_path = ""
         try:
-            db_member = self._db.get_member(member_id) # <-- SỬA THÀNH get_member
+            db_member = self._db.get_member(member_id) # Gọi tới database để lấy thông tin hội viên.
             if db_member:
                 image_path = db_member.get("image_path", "") or "" # Lấy image path từ database
         except Exception as e:

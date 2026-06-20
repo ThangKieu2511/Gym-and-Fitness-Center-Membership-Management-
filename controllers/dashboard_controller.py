@@ -308,35 +308,30 @@ class DashboardController:
         """
         Chi tiết các gói tập đã đăng ký trong tháng hiện tại.
         Dùng cho Sheet 'Doanh Thu Tháng' khi xuất báo cáo Excel.
-
-        Returns
-        -------
-        list[dict]:
-            member_name  : str   — Họ tên hội viên
-            plan_name    : str   — Loại gói tập
-            price        : float — Giá tiền
-            start_date   : str   — Ngày đăng ký
+        (Đã nâng cấp: Gom nhóm tất cả giao dịch của 1 hội viên thành 1 dòng và tính tổng tiền)
         """
         today = date.today()
         month_prefix = f"{today.year:04d}-{today.month:02d}"
 
         rows = self._db._execute(
             """
-            SELECT m.name        AS member_name,
-                   p.name        AS plan_name,
-                   p.price       AS price,
-                   s.start_date  AS start_date
+            SELECT m.name                      AS member_name,
+                   GROUP_CONCAT(p.name, ' + ') AS plan_name,
+                   SUM(p.price)                AS price,
+                   MAX(s.start_date)           AS start_date
             FROM   subscriptions s
             JOIN   members m ON m.id = s.member_id
             JOIN   plans   p ON p.id = s.plan_id
             WHERE  s.start_date LIKE ?
-            ORDER BY s.start_date DESC, m.name
+            GROUP BY m.id, m.name
+            ORDER BY start_date DESC, m.name
             """,
             (f"{month_prefix}%",),
             fetch="all",
         )
         return rows or []
 
+    # Danh sách hội viên có gói active sắp hết hạn trong N ngày tới (cho xuất Excel)
     def get_expiring_members(self, days_ahead: int = 7) -> list[dict]:
         """
         Danh sách hội viên có gói active sắp hết hạn trong vòng N ngày tới.
