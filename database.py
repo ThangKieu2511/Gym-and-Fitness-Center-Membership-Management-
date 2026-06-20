@@ -109,15 +109,18 @@ class Database:
 
             # ---- members ----------------------------------------------
             """
-            CREATE TABLE IF NOT EXISTS members (
+                CREATE TABLE IF NOT EXISTS members (
                 id        INTEGER PRIMARY KEY AUTOINCREMENT,
                 name      TEXT    NOT NULL,
-                phone     TEXT UNIQUE,
+                phone     TEXT UNIQUE CHECK (
+                    phone IS NULL OR (length(phone) = 10 AND phone GLOB '0[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]')
+                ),
                 email     TEXT UNIQUE,
                 gender    TEXT,
                 join_date TEXT,
-                qr_code   TEXT UNIQUE
-            )
+                qr_code   TEXT UNIQUE,
+                image_path TEXT
+                )
             """,
 
             # ---- plans ------------------------------------------------

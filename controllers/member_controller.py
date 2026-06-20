@@ -31,7 +31,7 @@ class MemberController:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _validate(name: str, email: str) -> None:
+    def _validate(name: str, email: str, phone: str) -> None:
         """Ném ValueError nếu dữ liệu không hợp lệ."""
         if not name:
             raise ValueError("Họ tên không được để trống.")
@@ -39,6 +39,13 @@ class MemberController:
             raise ValueError("Họ tên không được vượt quá 120 ký tự.")
         if email and "@" not in email:
             raise ValueError("Địa chỉ email không hợp lệ.")
+        if phone:
+            if not phone.isdigit():
+                raise ValueError("Số điện thoại chỉ được chứa các ký số từ 0-9!")
+            if not phone.startswith("0"):
+                raise ValueError("Số điện thoại không hợp lệ! Phải bắt đầu bằng số 0.")
+            if len(phone) != 10:
+                raise ValueError(f"Số điện thoại phải có đúng 10 số! (Bạn đang nhập {len(phone)} số)")
 
     @staticmethod
     # Chuyển lỗi trùng lặp của SQLite thành thông báo dễ hiểu cho người dùng
@@ -108,7 +115,7 @@ class MemberController:
 
 
         # Kiểm tra (Validation) — ném ValueError nếu không hợp lệ
-        self._validate(name, email)
+        self._validate(name, email, phone)
 
         try:
             # Gọi tới Database để thêm hội viên mới, trả về ID tự động
@@ -139,7 +146,7 @@ class MemberController:
         email  = email.strip()
         gender = gender.strip()
 
-        self._validate(name, email)
+        self._validate(name, email, phone)
 
         try:
             # Lấy qr_code và image_path gốc để không vô tình xóa dữ liệu đã có
